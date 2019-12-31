@@ -22,6 +22,10 @@
 #include "sep/sep.h"
 #include "fpack.h"
 
+#include "hough/houghtransform.h"
+// Supply template class source file to please linker
+#include "hough/houghtransform.cpp"
+
 #include "kstarsdata.h"
 #include "ksutils.h"
 #include "kspaths.h"
@@ -948,11 +952,152 @@ int FITSData::findStars(StarAlgorithm algorithm, const QRect &trackingBox)
         case ALGORITHM_THRESHOLD:
             count = findOneStar(trackingBox);
             break;
+
+        case ALGORITHM_HOUGH:
+            count = findBahtinovStar(this, trackingBox);
+            break;
+
+        default:
+            break;
     }
 
     starsSearched = true;
 
     return count;
+}
+
+int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
+{
+    switch (data->property("dataType").toInt())
+    {
+        case TBYTE:
+            return FITSData::findBahtinovStar<uint8_t>(data, boundary);
+
+        case TSHORT:
+            return FITSData::findBahtinovStar<int16_t>(data, boundary);
+
+        case TUSHORT:
+            return FITSData::findBahtinovStar<uint16_t>(data, boundary);
+
+        case TLONG:
+            return FITSData::findBahtinovStar<int32_t>(data, boundary);
+
+        case TULONG:
+            return FITSData::findBahtinovStar<uint16_t>(data, boundary);
+
+        case TFLOAT:
+            return FITSData::findBahtinovStar<float>(data, boundary);
+
+        case TLONGLONG:
+            return FITSData::findBahtinovStar<int64_t>(data, boundary);
+
+        case TDOUBLE:
+            return FITSData::findBahtinovStar<double>(data, boundary);
+
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+template <typename T>
+int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
+{
+    int subX = qMax(0, boundary.isNull() ? 0 : boundary.x());
+    int subY = qMax(0, boundary.isNull() ? 0 : boundary.y());
+    int subW = (boundary.isNull() ? data->width() : boundary.width());
+    int subH = (boundary.isNull() ? data->height() : boundary.height());
+
+    int BBP = data->getBytesPerPixel();
+
+    uint16_t dataWidth = data->width();
+
+    // #1 Find offsets
+    uint32_t size   = subW * subH;
+    uint32_t offset = subX + subY * dataWidth;
+
+    // #2 Create new buffer
+    auto * buffer = new uint8_t[size * BBP];
+    // If there is no offset, copy whole buffer in one go
+    if (offset == 0)
+    {
+        memcpy(buffer, data->getImageBuffer(), size * BBP);
+    }
+    else
+    {
+        uint8_t * dataPtr     = buffer;
+        uint8_t * origDataPtr = data->getImageBuffer();
+        uint32_t lineOffset  = 0;
+        // Copy data line by line
+        for (int height = subY; height < (subY + subH); height++)
+        {
+            lineOffset = (subX + height * dataWidth) * BBP;
+            memcpy(dataPtr, origDataPtr + lineOffset, subW * BBP);
+            dataPtr += (subW * BBP);
+        }
+    }
+    // #3 Create new FITSData to hold it
+    auto * boundedImage                     = new FITSData();
+    boundedImage->stats.width               = subW;
+    boundedImage->stats.height              = subH;
+    boundedImage->stats.bitpix              = data->stats.bitpix;
+    boundedImage->stats.bytesPerPixel       = data->stats.bytesPerPixel;
+    boundedImage->stats.samples_per_channel = size;
+    boundedImage->stats.ndim                = 2;
+
+    boundedImage->setProperty("dataType", data->property("dataType"));
+
+    // #4 Set image buffer and calculate stats.
+    boundedImage->setImageBuffer(buffer);
+
+    boundedImage->calculateStats(true);
+
+    // #5 Apply Median + High Contrast filter to remove noise and move data to non-linear domain
+    boundedImage->applyFilter(FITS_MEDIAN);
+    boundedImage->applyFilter(FITS_HIGH_CONTRAST);
+
+    // #6 Perform Sobel to find gradients and their directions
+    QVector<T> gradients;
+    QVector<int> directions;
+
+    // TODO Must trace neighbours and assign IDs to each shape so that they can be centered massed
+    // and discarded whenever necessary. It won't work on noisy images unless this is done.
+    boundedImage->sobel<T>(gradients, directions);
+
+    // Non-Maximum Suppression
+    QVector<T> thinned = boundedImage->thinning(subW, subH, gradients, directions);
+    QVector<T> thresholded = boundedImage->threshold((T)25, (T)220, thinned);
+    QVector<T> traced = boundedImage->hysteresis(subW, subH, thresholded);
+
+    // Not needed anymore
+    delete boundedImage;
+
+    // Hough Transform
+    QVector<T> houghArray;
+    houghArray.clear();
+
+    QVector<HoughLine*> houghLines;
+    houghLines.clear();
+    HoughTransform htf(subW, subH, houghArray);
+    htf.addPoints(traced, houghArray);
+    houghLines.clear();
+    htf.getLines(30, houghArray, houghLines);
+
+    // TODO PRM: Implement offset calculation
+
+    // Clean up lines array as they are no longer needed
+    for (int index = 0; index < houghLines.size(); index++)
+    {
+        HoughLine* pHoughLine = houghLines[index];
+        if (pHoughLine != nullptr) {
+            delete pHoughLine;
+        }
+    }
+    houghLines.clear();
+    houghArray.clear();
+
+    return 1;
 }
 
 int FITSData::filterStars(const float innerRadius, const float outerRadius)
@@ -1009,7 +1154,7 @@ int FITSData::findCannyStar(FITSData * data, const QRect &boundary)
     }
 
     // #3 Create new FITSData to hold it
-    auto * boundedImage                      = new FITSData();
+    auto * boundedImage                     = new FITSData();
     boundedImage->stats.width               = subW;
     boundedImage->stats.height              = subH;
     boundedImage->stats.bitpix              = data->stats.bitpix;
@@ -1029,8 +1174,8 @@ int FITSData::findCannyStar(FITSData * data, const QRect &boundary)
     boundedImage->applyFilter(FITS_HIGH_CONTRAST);
 
     // #6 Perform Sobel to find gradients and their directions
-    QVector<float> gradients;
-    QVector<float> directions;
+    QVector<T> gradients;
+    QVector<int> directions;
 
     // TODO Must trace neighbours and assign IDs to each shape so that they can be centered massed
     // and discarded whenever necessary. It won't work on noisy images unless this is done.
@@ -1065,7 +1210,7 @@ int FITSData::findCannyStar(FITSData * data, const QRect &boundary)
             int regionID = ids[index];
             if (regionID > 0)
             {
-                float pixel = gradients[index];
+                T pixel = gradients[index];
 
                 masses[regionID].totalMass += pixel;
                 masses[regionID].massX += x * pixel;
@@ -1787,6 +1932,8 @@ double FITSData::getHFR(HFRType type)
     // Get HFR for the brightest star only, instead of averaging all stars
     // It is more consistent.
     // TODO: Try to test this under using a real CCD.
+
+    // NOTE: Call this method with HFR_MAX in case of Bahtinov mask focus
 
     if (starCenters.empty())
         return -1;
@@ -3495,7 +3642,7 @@ double FITSData::getADU() const
  */
 
 template <typename T>
-void FITSData::sobel(QVector<float> &gradient, QVector<float> &direction)
+void FITSData::sobel(QVector<T> &gradient, QVector<int> &direction)
 {
     //int size = image.width() * image.height();
     gradient.resize(stats.samples_per_channel);
@@ -3509,18 +3656,18 @@ void FITSData::sobel(QVector<float> &gradient, QVector<float> &direction)
         const T * grayLine_m1 = y < 1 ? grayLine : grayLine - stats.width;
         const T * grayLine_p1 = y >= stats.height - 1 ? grayLine : grayLine + stats.width;
 
-        float * gradientLine  = gradient.data() + yOffset;
-        float * directionLine = direction.data() + yOffset;
+        T * gradientLine  = gradient.data() + yOffset;
+        int * directionLine = direction.data() + yOffset;
 
         for (int x = 0; x < stats.width; x++)
         {
             int x_m1 = x < 1 ? x : x - 1;
             int x_p1 = x >= stats.width - 1 ? x : x + 1;
 
-            int gradX = grayLine_m1[x_p1] + 2 * grayLine[x_p1] + grayLine_p1[x_p1] - grayLine_m1[x_m1] -
+            T gradX = grayLine_m1[x_p1] + 2 * grayLine[x_p1] + grayLine_p1[x_p1] - grayLine_m1[x_m1] -
                         2 * grayLine[x_m1] - grayLine_p1[x_m1];
 
-            int gradY = grayLine_m1[x_m1] + 2 * grayLine_m1[x] + grayLine_m1[x_p1] - grayLine_p1[x_m1] -
+            T gradY = grayLine_m1[x_m1] + 2 * grayLine_m1[x] + grayLine_m1[x_p1] - grayLine_p1[x_m1] -
                         2 * grayLine_p1[x] - grayLine_p1[x_p1];
 
             gradientLine[x] = qAbs(gradX) + qAbs(gradY);
@@ -3557,7 +3704,7 @@ void FITSData::sobel(QVector<float> &gradient, QVector<float> &direction)
                 directionLine[x] = 3;
             else
             {
-                qreal a = 180. * atan(qreal(gradY) / gradX) / M_PI;
+                qreal a = 180.0 * atan(qreal(gradY) / qreal(gradX)) / M_PI;
 
                 if (a >= -22.5 && a < 22.5)
                     directionLine[x] = 0;
@@ -3572,7 +3719,8 @@ void FITSData::sobel(QVector<float> &gradient, QVector<float> &direction)
     }
 }
 
-int FITSData::partition(int width, int height, QVector<float> &gradient, QVector<int> &ids)
+template <typename T>
+int FITSData::partition(int width, int height, QVector<T> &gradient, QVector<int> &ids)
 {
     int id = 0;
 
@@ -3581,7 +3729,7 @@ int FITSData::partition(int width, int height, QVector<float> &gradient, QVector
         for (int x = 1; x < width - 1; x++)
         {
             int index = x + y * width;
-            float val = gradient[index];
+            T val = gradient[index];
             if (val > 0 && ids[index] == 0)
             {
                 trace(width, height, ++id, gradient, ids, x, y);
@@ -3593,11 +3741,12 @@ int FITSData::partition(int width, int height, QVector<float> &gradient, QVector
     return id;
 }
 
-void FITSData::trace(int width, int height, int id, QVector<float> &image, QVector<int> &ids, int x, int y)
+template <typename T>
+void FITSData::trace(int width, int height, int id, QVector<T> &image, QVector<int> &ids, int x, int y)
 {
-    int yOffset      = y * width;
-    float * cannyLine = image.data() + yOffset;
-    int * idLine      = ids.data() + yOffset;
+    int yOffset   = y * width;
+    T * cannyLine = image.data() + yOffset;
+    int * idLine  = ids.data() + yOffset;
 
     if (idLine[x] != 0)
         return;
@@ -3611,7 +3760,7 @@ void FITSData::trace(int width, int height, int id, QVector<float> &image, QVect
         if (nextY < 0 || nextY >= height)
             continue;
 
-        float * cannyLineNext = cannyLine + j * width;
+        T * cannyLineNext = cannyLine + j * width;
 
         for (int i = -1; i < 2; i++)
         {
@@ -3627,6 +3776,135 @@ void FITSData::trace(int width, int height, int id, QVector<float> &image, QVect
             }
         }
     }
+}
+
+template <typename T>
+QVector<T> FITSData::thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction)
+{
+    QVector<T> thinned(gradient.size());
+
+    for (int y = 0; y < height; y++) {
+        int yOffset = y * width;
+        const T *gradientLine = gradient.constData() + yOffset;
+        const T *gradientLine_m1 = y < 1? gradientLine: gradientLine - width;
+        const T *gradientLine_p1 = y >= height - 1? gradientLine: gradientLine + width;
+        const int *directionLine = direction.constData() + yOffset;
+        T *thinnedLine = thinned.data() + yOffset;
+
+        for (int x = 0; x < width; x++) {
+            int x_m1 = x < 1? 0: x - 1;
+            int x_p1 = x >= width - 1? x: x + 1;
+
+            int direction = directionLine[x];
+            T pixel = 0;
+
+            if (direction == 0) {
+                /* x x x
+                 * - - -
+                 * x x x
+                 */
+                if (gradientLine[x] < gradientLine[x_m1]
+                    || gradientLine[x] < gradientLine[x_p1])
+                    pixel = 0;
+                else
+                    pixel = gradientLine[x];
+            } else if (direction == 1) {
+                /* x x /
+                 * x / x
+                 * / x x
+                 */
+                if (gradientLine[x] < gradientLine_m1[x_p1]
+                    || gradientLine[x] < gradientLine_p1[x_m1])
+                    pixel = 0;
+                else
+                    pixel = gradientLine[x];
+            } else if (direction == 2) {
+                /* \ x x
+                 * x \ x
+                 * x x \
+                 */
+                if (gradientLine[x] < gradientLine_m1[x_m1]
+                    || gradientLine[x] < gradientLine_p1[x_p1])
+                    pixel = 0;
+                else
+                    pixel = gradientLine[x];
+            } else {
+                /* x | x
+                 * x | x
+                 * x | x
+                 */
+                if (gradientLine[x] < gradientLine_m1[x]
+                    || gradientLine[x] < gradientLine_p1[x])
+                    pixel = 0;
+                else
+                    pixel = gradientLine[x];
+            }
+
+            thinnedLine[x] = pixel;
+        }
+    }
+
+    return thinned;
+}
+
+template <typename T>
+QVector<T> FITSData::threshold(T thLow, T thHi, QVector<T> &image)
+{
+    QVector<T> thresholded(image.size());
+
+    for (int i = 0; i < image.size(); i++)
+        thresholded[i] = image[i] <= thLow? 0:
+                         image[i] >= thHi? 255:
+                                           127;
+
+    return thresholded;
+}
+
+template <typename T>
+void FITSData::traceLines(int width, int height, QVector<T> &image, int x, int y)
+{
+    int yOffset = y * width;
+    T *cannyLine = image.data() + yOffset;
+
+    if (cannyLine[x] != 255)
+        return;
+
+    for (int j = -1; j < 2; j++) {
+        int nextY = y + j;
+
+        if (nextY < 0 || nextY >= height)
+            continue;
+
+        T *cannyLineNext = cannyLine + j * width;
+
+        for (int i = -1; i < 2; i++) {
+            int nextX = x + i;
+
+            if (i == j || nextX < 0 || nextX >= width)
+                continue;
+
+            if (cannyLineNext[nextX] == 127) {
+                cannyLineNext[nextX] = 255;
+                traceLines(width, height, image, nextX, nextY);
+            }
+        }
+    }
+}
+
+template <typename T>
+QVector<T> FITSData::hysteresis(int width, int height, QVector<T> &image)
+{
+    QVector<T> canny(image);
+
+    for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            traceLines(width, height, canny, x, y);
+
+    for (int i = 0; i < canny.size(); i++)
+        if (canny[i] == 127)
+            canny[i] = 0;
+
+    return canny;
 }
 
 QString FITSData::getLastError() const

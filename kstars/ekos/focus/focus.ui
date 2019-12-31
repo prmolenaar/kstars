@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>702</width>
+    <width>766</width>
     <height>468</height>
    </rect>
   </property>
@@ -1135,6 +1135,11 @@
                  <string>SEP</string>
                 </property>
                </item>
+               <item>
+                <property name="text">
+                 <string>Bahtinov Mask</string>
+                </property>
+               </item>
               </widget>
              </item>
              <item row="1" column="0">
@@ -1311,7 +1316,7 @@
             <number>3</number>
            </property>
            <item>
-            <layout class="QGridLayout" name="gridLayout" rowstretch="0,0,0,0">
+            <layout class="QGridLayout" name="gridLayout" rowstretch="0,0,0">
              <property name="spacing">
               <number>3</number>
              </property>

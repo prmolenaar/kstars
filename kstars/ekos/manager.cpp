@@ -192,12 +192,10 @@ Manager::Manager(QWidget * parent) : QDialog(parent)
         Options::setProfile(text);
         if (text == "Simulators")
         {
-            editProfileB->setEnabled(false);
             deleteProfileB->setEnabled(false);
         }
         else
         {
-            editProfileB->setEnabled(true);
             deleteProfileB->setEnabled(true);
         }
     });

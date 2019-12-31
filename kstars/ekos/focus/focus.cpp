@@ -1016,7 +1016,9 @@ void Focus::setCaptureComplete()
 
     // Notify user if we're not looping
     if (inFocusLoop == false)
+    {
         appendLogText(i18n("Image received."));
+    }
 
     // If we're not looping and not in autofocus, enable user to capture again.
     if (captureInProgress && inFocusLoop == false && inAutoFocus == false)
@@ -1027,7 +1029,9 @@ void Focus::setCaptureComplete()
     }
 
     if (rememberCCDExposureLooping)
+    {
         currentCCD->setExposureLoopingEnabled(true);
+    }
 
     captureInProgress = false;
 
@@ -1162,7 +1166,6 @@ void Focus::setCaptureComplete()
             capture();
             return;
         }
-
 
         // Let signal the current HFR now depending on whether the focuser is absolute or relative
         if (canAbsMove)
@@ -1473,7 +1476,7 @@ void Focus::setCaptureComplete()
         return;
     }
 
-    // Let's draw the HFR Plot
+    // Let's draw the HFR or Focus Error Plot
     drawProfilePlot();
 
     // If focus logging is enabled, let's save the frame.
@@ -1493,7 +1496,9 @@ void Focus::setCaptureComplete()
 
     // If we are not in autofocus process, we're done.
     if (inAutoFocus == false)
+    {
         return;
+    }
 
     // Set state to progress
     if (state != Ekos::FOCUS_PROGRESS)
@@ -1507,10 +1512,14 @@ void Focus::setCaptureComplete()
 
     // Position-based algorithms
     if (canAbsMove || canRelMove)
+    {
         autoFocusAbs();
+    }
     else
+    {
         // Time open-looped algorithms
         autoFocusRel();
+    }
 }
 
 void Focus::clearDataPoints()
@@ -3499,6 +3508,12 @@ void Focus::initConnections()
     {
         focusDetection = static_cast<StarAlgorithm>(index);
         thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
+        if (focusDetection == ALGORITHM_HOUGH)
+        {
+            // In case of Bahtinov mask uncheck auto select star
+            useAutoStar->setChecked(false);
+        }
+        useAutoStar->setEnabled(focusDetection != ALGORITHM_HOUGH);
     });
 
     // Update the focuser solution algorithm if the selection changes.

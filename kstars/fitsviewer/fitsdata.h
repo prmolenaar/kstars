@@ -23,6 +23,7 @@
 
 #include "bayer.h"
 #include "fitscommon.h"
+#include "hough/houghline.h"
 
 #ifdef WIN32
 // This header must be included before fitsio.h to avoid compiler errors with Visual Studio
@@ -295,6 +296,11 @@ class FITSData : public QObject
         template <typename T>
         static int findCannyStar(FITSData *data, const QRect &boundary);
 
+        // Star Detection - using Bahtinov detection algorithm
+        static int findBahtinovStar(FITSData *data, const QRect &boundary = QRect());
+        template <typename T>
+        static int findBahtinovStar(FITSData *data, const QRect &boundary);
+
         // Use SEP (Sextractor Library) to find stars
         template <typename T>
         void getFloatBuffer(float *buffer, int x, int y, int w, int h);
@@ -308,6 +314,7 @@ class FITSData : public QObject
         {
             return maxHFRStar;
         }
+
         double getHFR(HFRType type = HFR_AVERAGE);
         double getHFR(int x, int y);
 
@@ -485,14 +492,26 @@ class FITSData : public QObject
 
         // Sobel detector by Gonzalo Exequiel Pedone
         template <typename T>
-        void sobel(QVector<float> &gradient, QVector<float> &direction);
+        void sobel(QVector<T> &gradient, QVector<int> &direction);
 
         template <typename T>
         void convertToQImage(double dataMin, double dataMax, double scale, double zero, QImage &image);
 
         // Give unique IDs to each contiguous region
-        int partition(int width, int height, QVector<float> &gradient, QVector<int> &ids);
-        void trace(int width, int height, int id, QVector<float> &image, QVector<int> &ids, int x, int y);
+        template <typename T>
+        int partition(int width, int height, QVector<T> &gradient, QVector<int> &ids);
+        template <typename T>
+        void trace(int width, int height, int id, QVector<T> &image, QVector<int> &ids, int x, int y);
+
+        // Canny Edge detection methods as preparation for Hough Transform
+        template <typename T>
+        QVector<T> thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction);
+        template <typename T>
+        QVector<T> threshold(T thLow, T thHi, QVector<T> &image);
+        template <typename T>
+        void traceLines(int width, int height, QVector<T> &image, int x, int y);
+        template <typename T>
+        QVector<T> hysteresis(int width, int height, QVector<T> &image);
 
 #ifndef KSTARS_LITE
         FITSHistogram *histogram { nullptr }; // Pointer to the FITS data histogram
