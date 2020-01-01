@@ -505,13 +505,13 @@ class FITSData : public QObject
 
         // Canny Edge detection methods as preparation for Hough Transform
         template <typename T>
-        QVector<T> thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction);
+        void thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction, QVector<T> &thinned);
         template <typename T>
-        QVector<T> threshold(T thLow, T thHi, QVector<T> &image);
+        void threshold(T thLow, T thHi, const QVector<T> &image, QVector<T> &thresholded);
+        template <typename T>
+        QVector<T> hysteresis(int width, int height, const QVector<T> &image);
         template <typename T>
         void traceLines(int width, int height, QVector<T> &image, int x, int y);
-        template <typename T>
-        QVector<T> hysteresis(int width, int height, QVector<T> &image);
 
 #ifndef KSTARS_LITE
         FITSHistogram *histogram { nullptr }; // Pointer to the FITS data histogram

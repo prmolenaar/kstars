@@ -33,7 +33,7 @@ class HoughTransform
     void initialise(QVector<T> &houghArray);
 
     template <typename T>
-    void addPoints(QVector<T> &image, QVector<T> &houghArray);
+    void addPoints(const QVector<T> &image, QVector<T> &houghArray);
 
     template <typename T>
     void addPoint(int x, int y, QVector<T> &houghArray);
@@ -49,20 +49,17 @@ class HoughTransform
 
   private:
     // The size of the neighbourhood in which to search for other local maxima
-    int neighbourhoodSize = 4;
+    static const int NEIGHBOURHOOD_SIZE = 4;
 
     // How many discrete values of theta shall we check?
-    int maxTheta = 180;
+    static const int MAX_THETA = 180;
 
     // Using maxTheta, work out the step
-    double thetaStep = M_PI / maxTheta;
+    const double thetaStep = M_PI / MAX_THETA;
 
     // the width and height of the image
     int width;
     int height;
-
-    // the hough array (size: width x height)
-//    QVector<T> &houghArray;
 
     // the coordinates of the centre of the image
     float centerX, centerY;

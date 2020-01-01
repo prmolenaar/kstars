@@ -3213,8 +3213,6 @@ void Focus::loadSettings()
     ///////////////////////////////////////////////////////////////////////////
     /// Settings Group
     ///////////////////////////////////////////////////////////////////////////
-    // Auto Star?
-    useAutoStar->setChecked(Options::focusAutoStarEnabled());
     // Subframe?
     useSubFrame->setChecked(Options::focusSubFrame());
     // Dark frame?
@@ -3253,6 +3251,14 @@ void Focus::loadSettings()
     focusDetection = static_cast<StarAlgorithm>(Options::focusDetection());
     thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
     focusDetectionCombo->setCurrentIndex(focusDetection);
+    if (focusDetection == ALGORITHM_HOUGH)
+    {
+        Options::setFocusAutoStarEnabled(false);
+    }
+    useAutoStar->setEnabled(focusDetection != ALGORITHM_HOUGH);
+    // Auto Star?
+    bool autoStarEnabled = Options::focusAutoStarEnabled();
+    useAutoStar->setChecked(Options::focusAutoStarEnabled());
 }
 
 void Focus::initSettingsConnections()

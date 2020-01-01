@@ -1057,36 +1057,34 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     boundedImage->applyFilter(FITS_MEDIAN);
     boundedImage->applyFilter(FITS_HIGH_CONTRAST);
 
-    // #6 Perform Sobel to find gradients and their directions
+    // #6 Perform Hough transform after image passed through Canny edge detection
     QVector<T> gradients;
     QVector<int> directions;
+    QVector<T> thinned;
+    QVector<T> thresholded;
+    QVector<T> traced;
 
-    // TODO Must trace neighbours and assign IDs to each shape so that they can be centered massed
-    // and discarded whenever necessary. It won't work on noisy images unless this is done.
+    // Sobel, Non-Maximum Suppression, Thresholding and Canny
     boundedImage->sobel<T>(gradients, directions);
-
-    // Non-Maximum Suppression
-    QVector<T> thinned = boundedImage->thinning(subW, subH, gradients, directions);
-    QVector<T> thresholded = boundedImage->threshold((T)25, (T)220, thinned);
-    QVector<T> traced = boundedImage->hysteresis(subW, subH, thresholded);
+    boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
+    boundedImage->threshold<T>((T)25, (T)220, thinned, thresholded);
+    traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
 
     // Not needed anymore
     delete boundedImage;
 
     // Hough Transform
     QVector<T> houghArray;
-    houghArray.clear();
-
-    QVector<HoughLine*> houghLines;
-    houghLines.clear();
     HoughTransform htf(subW, subH, houghArray);
     htf.addPoints(traced, houghArray);
-    houghLines.clear();
+
+    QVector<HoughLine*> houghLines;
+    // TODO PRM: Insert user threshold instead of fixed value of 30
     htf.getLines(30, houghArray, houghLines);
 
     // TODO PRM: Implement offset calculation
 
-    // Clean up lines array as they are no longer needed
+    // Clean up lines array (of pointers) as they are no longer needed
     for (int index = 0; index < houghLines.size(); index++)
     {
         HoughLine* pHoughLine = houghLines[index];
@@ -1095,7 +1093,6 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         }
     }
     houghLines.clear();
-    houghArray.clear();
 
     return 1;
 }
@@ -3779,9 +3776,9 @@ void FITSData::trace(int width, int height, int id, QVector<T> &image, QVector<i
 }
 
 template <typename T>
-QVector<T> FITSData::thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction)
+void FITSData::thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction, QVector<T> &thinned)
 {
-    QVector<T> thinned(gradient.size());
+    thinned.resize(gradient.size());
 
     for (int y = 0; y < height; y++) {
         int yOffset = y * width;
@@ -3843,21 +3840,19 @@ QVector<T> FITSData::thinning(int width, int height, const QVector<T> &gradient,
             thinnedLine[x] = pixel;
         }
     }
-
-    return thinned;
 }
 
 template <typename T>
-QVector<T> FITSData::threshold(T thLow, T thHi, QVector<T> &image)
+void FITSData::threshold(T thLow, T thHi, const QVector<T> &image, QVector<T> &thresholded)
 {
-    QVector<T> thresholded(image.size());
+    thresholded.resize(image.size());
 
     for (int i = 0; i < image.size(); i++)
+    {
         thresholded[i] = image[i] <= thLow? 0:
                          image[i] >= thHi? 255:
                                            127;
-
-    return thresholded;
+    }
 }
 
 template <typename T>
@@ -3869,7 +3864,8 @@ void FITSData::traceLines(int width, int height, QVector<T> &image, int x, int y
     if (cannyLine[x] != 255)
         return;
 
-    for (int j = -1; j < 2; j++) {
+    for (int j = -1; j < 2; j++)
+    {
         int nextY = y + j;
 
         if (nextY < 0 || nextY >= height)
@@ -3877,13 +3873,15 @@ void FITSData::traceLines(int width, int height, QVector<T> &image, int x, int y
 
         T *cannyLineNext = cannyLine + j * width;
 
-        for (int i = -1; i < 2; i++) {
+        for (int i = -1; i < 2; i++)
+        {
             int nextX = x + i;
 
             if (i == j || nextX < 0 || nextX >= width)
                 continue;
 
-            if (cannyLineNext[nextX] == 127) {
+            if (cannyLineNext[nextX] == 127)
+            {
                 cannyLineNext[nextX] = 255;
                 traceLines(width, height, image, nextX, nextY);
             }
@@ -3892,17 +3890,25 @@ void FITSData::traceLines(int width, int height, QVector<T> &image, int x, int y
 }
 
 template <typename T>
-QVector<T> FITSData::hysteresis(int width, int height, QVector<T> &image)
+QVector<T> FITSData::hysteresis(int width, int height, const QVector<T> &image)
 {
     QVector<T> canny(image);
 
     for (int y = 0; y < height; y++)
+    {
         for (int x = 0; x < width; x++)
-            traceLines(width, height, canny, x, y);
+        {
+            traceLines<T>(width, height, canny, x, y);
+        }
+    }
 
     for (int i = 0; i < canny.size(); i++)
+    {
         if (canny[i] == 127)
+        {
             canny[i] = 0;
+        }
+    }
 
     return canny;
 }
