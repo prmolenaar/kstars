@@ -41,6 +41,8 @@ class HoughTransform
     template <typename T>
     void getLines(int threshold, QVector<T> &houghArray, QVector<HoughLine*> &lines);
 
+    void getSortedTopThreeLines(QVector<HoughLine*> &houghLines, QVector<HoughLine*> &top3Lines);
+
     template <typename T>
     int getHighestValue(QVector<T> &houghArray);
 

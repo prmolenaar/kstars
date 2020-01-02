@@ -62,6 +62,8 @@ typedef struct
 class Edge
 {
     public:
+        virtual ~Edge() = default;
+
         float x;
         float y;
         int val;
@@ -69,6 +71,13 @@ class Edge
         float width;
         float HFR;
         float sum;
+};
+
+class BahtinovEdge : public Edge
+{
+    public:
+        virtual ~BahtinovEdge() = default;
+        QVector<QLine> line;
 };
 
 class FITSSkyObject : public QObject

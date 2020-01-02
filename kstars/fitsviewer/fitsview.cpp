@@ -781,8 +781,18 @@ void FITSView::drawStarCentroid(QPainter * painter)
         int const y1 = std::round((starCenter->y - starCenter->width / 2.0f) * ratio);
         int const w  = std::round(starCenter->width * ratio);
 
-        // Draw a circle around the detected star
-        painter->drawEllipse(x1, y1, w, w);
+        BahtinovEdge* bEdge = dynamic_cast<BahtinovEdge*>(starCenter);
+        if (bEdge != nullptr)
+        {
+            // TODO PRM: Use BahtinovEdge line vector to draw lines and circles
+            // Draw a circle around the detected star
+            painter->drawEllipse(x1, y1, w, w);
+        }
+        else
+        {
+            // Draw a circle around the detected star
+            painter->drawEllipse(x1, y1, w, w);
+        }
 
         if (showStarsHFR)
         {

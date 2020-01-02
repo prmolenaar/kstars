@@ -774,7 +774,7 @@
           <enum>QTabWidget::Rounded</enum>
          </property>
          <property name="currentIndex">
-          <number>0</number>
+          <number>1</number>
          </property>
          <widget class="QWidget" name="tab">
           <attribute name="title">
@@ -1056,6 +1056,63 @@
              <property name="spacing">
               <number>3</number>
              </property>
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_5">
+               <property name="toolTip">
+                <string/>
+               </property>
+               <property name="text">
+                <string>Detection:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="1">
+              <widget class="QComboBox" name="filterCombo">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>Apply filter to image after capture to enhance it</string>
+               </property>
+               <item>
+                <property name="text">
+                 <string>--</string>
+                </property>
+               </item>
+              </widget>
+             </item>
+             <item row="3" column="2">
+              <widget class="QLabel" name="label_3">
+               <property name="toolTip">
+                <string/>
+               </property>
+               <property name="text">
+                <string>Average over:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="3" column="3">
+              <widget class="QSpinBox" name="focusFramesSpin">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;body&gt;&lt;p&gt;Number of frames to capture in order to average the HFR value at the current focuser position.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+               </property>
+               <property name="suffix">
+                <string> frames</string>
+               </property>
+               <property name="minimum">
+                <number>1</number>
+               </property>
+              </widget>
+             </item>
              <item row="1" column="2">
               <widget class="QLabel" name="label_4">
                <property name="toolTip">
@@ -1094,7 +1151,7 @@
                </property>
               </widget>
              </item>
-             <item row="2" column="0">
+             <item row="3" column="0">
               <widget class="QLabel" name="label_8">
                <property name="toolTip">
                 <string/>
@@ -1152,37 +1209,6 @@
                </property>
               </widget>
              </item>
-             <item row="1" column="1">
-              <widget class="QDoubleSpinBox" name="thresholdSpin">
-               <property name="enabled">
-                <bool>false</bool>
-               </property>
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="toolTip">
-                <string>&lt;html&gt;&lt;body&gt;&lt;p&gt;Increase to restrict the centroid to bright cores. Decrease to enclose fuzzy stars.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-               </property>
-               <property name="suffix">
-                <string> %</string>
-               </property>
-               <property name="minimum">
-                <double>90.000000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>500.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>10.000000000000000</double>
-               </property>
-               <property name="value">
-                <double>150.000000000000000</double>
-               </property>
-              </widget>
-             </item>
              <item row="0" column="3">
               <widget class="QComboBox" name="focusAlgorithmCombo">
                <property name="sizePolicy">
@@ -1221,46 +1247,11 @@
                </property>
               </widget>
              </item>
-             <item row="0" column="0">
-              <widget class="QLabel" name="label_5">
-               <property name="toolTip">
-                <string/>
+             <item row="1" column="1">
+              <widget class="QDoubleSpinBox" name="thresholdSpin">
+               <property name="enabled">
+                <bool>false</bool>
                </property>
-               <property name="text">
-                <string>Detection:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="1">
-              <widget class="QComboBox" name="filterCombo">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-                 <horstretch>0</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="toolTip">
-                <string>Apply filter to image after capture to enhance it</string>
-               </property>
-               <item>
-                <property name="text">
-                 <string>--</string>
-                </property>
-               </item>
-              </widget>
-             </item>
-             <item row="2" column="2">
-              <widget class="QLabel" name="label_3">
-               <property name="toolTip">
-                <string/>
-               </property>
-               <property name="text">
-                <string>Average over:</string>
-               </property>
-              </widget>
-             </item>
-             <item row="2" column="3">
-              <widget class="QSpinBox" name="focusFramesSpin">
                <property name="sizePolicy">
                 <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
                  <horstretch>0</horstretch>
@@ -1268,13 +1259,57 @@
                 </sizepolicy>
                </property>
                <property name="toolTip">
-                <string>&lt;html&gt;&lt;body&gt;&lt;p&gt;Number of frames to capture in order to average the HFR value at the current focuser position.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                <string>&lt;html&gt;&lt;body&gt;&lt;p&gt;Increase to restrict the centroid to bright cores. Decrease to enclose fuzzy stars.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="suffix">
-                <string> frames</string>
+                <string> %</string>
+               </property>
+               <property name="minimum">
+                <double>90.000000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>500.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>10.000000000000000</double>
+               </property>
+               <property name="value">
+                <double>150.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="0">
+              <widget class="QLabel" name="label_20">
+               <property name="toolTip">
+                <string/>
+               </property>
+               <property name="text">
+                <string>Threshold:</string>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="bahtinovThresholdSpin">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Bahtinov edge detection threshold. Decrease if not all three lines of the Bahtinov mask pattern are detected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
                <property name="minimum">
                 <number>1</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="value">
+                <number>30</number>
                </property>
               </widget>
              </item>

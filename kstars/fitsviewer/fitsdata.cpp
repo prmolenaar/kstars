@@ -1004,6 +1004,9 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 template <typename T>
 int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 {
+    if (boundary.isEmpty())
+        return -1;
+
     int subX = qMax(0, boundary.isNull() ? 0 : boundary.x());
     int subY = qMax(0, boundary.isNull() ? 0 : boundary.y());
     int subW = (boundary.isNull() ? data->width() : boundary.width());
@@ -1079,10 +1082,76 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     htf.addPoints(traced, houghArray);
 
     QVector<HoughLine*> houghLines;
-    // TODO PRM: Insert user threshold instead of fixed value of 30
-    htf.getLines(30, houghArray, houghLines);
+    htf.getLines(Options::focusBahtinovThreshold(), houghArray, houghLines);
 
-    // TODO PRM: Implement offset calculation
+    // Calculate focus offset (store value in HFR)
+    qCInfo(KSTARS_FITS) << "Number of lines found: " << houghLines.size();
+
+    // Proceed with focus offset calculation, but only when at least 3 lines have been detected
+    QVector<HoughLine*> top3Lines;
+    if (houghLines.size() >= 3)
+    {
+        htf.getSortedTopThreeLines(houghLines, top3Lines);
+
+        // Print debug information
+        printf("houghLines:\r\n");
+        foreach (HoughLine* ln, houghLines)
+        {
+            ln->printHoughLine();
+        }
+        printf("top3Lines:\r\n");
+        foreach (HoughLine* ln, top3Lines)
+        {
+            ln->printHoughLine();
+        }
+        fflush(stdout);
+
+        // Determine intersection between outer lines
+        HoughLine* oneLine = top3Lines[0];
+        HoughLine* otherLine = top3Lines[2];
+        QPointF intersection;
+        HoughLine::IntersectResult result = oneLine->Intersect(*otherLine, intersection);
+        if (result == HoughLine::INTERESECTING) {
+
+            // Determine offset between intersection and middle line
+            HoughLine* midLine = top3Lines[1];
+            QPointF intersectionOnMidLine;
+            double distance;
+            if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
+                printf("Returned Offset is %.2f", distance);
+                double factor = 50.0;
+                QPointF offsetVector = (intersectionOnMidLine - intersection);
+                offsetVector *= factor;
+
+                // Add star center to selected stars
+                // Maximum Radius
+                int maxR = qMin(subW - 1, subH - 1) / 2;
+                Edge * center  = new BahtinovEdge;
+                center->width = maxR * 2; // TODO PRM: Adjust to distance?
+                center->x     = intersection.x();
+                center->y     = intersection.y();
+                // Set distance value in HFR
+                center->HFR   = distance;
+
+                // TODO PRM: Fill BahtinovEdge->line vector with line coordinates
+                // TODO PRM: Check development on focus module at http://knro.blogspot.com/2019/11/kstars-v337-released.html
+                // TODO PRM: Also usefull: https://doc.qt.io/archives/qt-4.8/qtalgorithms.html#qGreater
+
+                qCDebug(KSTARS_FITS) << "FITS: Bahtinov Center is X: " << center->x << " Y: " << center->y << " Width: " << center->width;
+
+                // TODO PRM: starCenters.append(center);
+            }
+            else
+            {
+                printf("closest point does not fall within the line segment.");
+            }
+        }
+        else
+        {
+            printf("Lines are not intersecting (result: %d)\r\n", result);
+        }
+    }
+    fflush(stdout);
 
     // Clean up lines array (of pointers) as they are no longer needed
     for (int index = 0; index < houghLines.size(); index++)
@@ -1093,6 +1162,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         }
     }
     houghLines.clear();
+    top3Lines.clear();
 
     return 1;
 }

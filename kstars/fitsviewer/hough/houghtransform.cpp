@@ -10,6 +10,7 @@
 #include "houghtransform.h"
 
 #include <qmath.h>
+#include <fits_debug.h>
 
 /**
  * Initialises the hough transform. The dimensions of the input image are needed
@@ -42,8 +43,6 @@ void HoughTransform::initialise(QVector<T> &houghArray)
 
     // Create the hough array (resize to MAX_THETA * doubleHeight and fill with 0)
     houghArray.fill((T)0, MAX_THETA * doubleHeight);
-    printf("Created houghArray with size of: %d (real size: %d), width: %d, height: %d\r\n",
-           (MAX_THETA * doubleHeight), houghArray.size(), width, height);
 
     // Find edge points and vote in array
     centerX = width / 2;
@@ -102,10 +101,7 @@ void HoughTransform::addPoint(int x, int y, QVector<T> &houghArray) {
         r += houghHeight;
 
         if (r < 0 || r >= doubleHeight)
-        {
-            printf("Warning: r out of range: %d / %d", r, doubleHeight);
             continue;
-        }
 
         // Increment the hough array
         int index = r * MAX_THETA + t; // houghArray[t][r]
@@ -115,8 +111,7 @@ void HoughTransform::addPoint(int x, int y, QVector<T> &houghArray) {
         }
         else
         {
-            printf("WARNING: Index out of range (x:%d, y:%d, r:%d, t:%d [deg], index:%d, size:%d)\r\n",
-                   x, y, r, t, index, houghArray.size());
+            qCDebug(KSTARS_FITS) << "Error: Index out of range " << index << " should be smaller then " << houghArray.size();
         }
     }
     numPoints++;
@@ -172,12 +167,54 @@ void HoughTransform::getLines(int threshold, QVector<T> &houghArray, QVector<Hou
                     double theta = t * thetaStep;
 
                     // add the line to the vector
-                    HoughLine *pHoughLine = new HoughLine(theta, r, width, height);
+                    HoughLine *pHoughLine = new HoughLine(theta, r, width, height, peak);
                     lines.append(pHoughLine);
                 }
             }
         }
     }
+}
+
+void HoughTransform::getSortedTopThreeLines(QVector<HoughLine*> &houghLines, QVector<HoughLine*> &top3Lines)
+{
+    // Sort houghLines by score (highest scores are clearest lines)
+    // TODO PRM: Use of sort compare methods see: https://www.off-soft.net/en/develop/qt/qtb1.html
+    qSort(houghLines.begin(),houghLines.end(), HoughLine::compareByScore);
+
+    // Get top three lines (these should represent the three lines matching the bahtinov mask lines
+    top3Lines = houghLines.mid(0, 3);
+    // Verify the angle of these lines with regard to the bahtinov mask angle, correct the angle if necessary
+    HoughLine* lineR = top3Lines[0];
+    HoughLine* lineG = top3Lines[1];
+    HoughLine* lineB = top3Lines[2];
+    double thetaR = lineR->getTheta();
+    double thetaG = lineG->getTheta();
+    double thetaB = lineB->getTheta();
+    // Calculate angle between each line
+    double bahtinovMaskAngle = qDegreesToRadians(20.0 + 5.0); // bahtinov mask angle plus 5 degree margin
+    double dGR = thetaR - thetaG;
+    double dBG = thetaB - thetaG;
+    double dBR = thetaB - thetaR;
+    if (dGR > bahtinovMaskAngle && dBR > bahtinovMaskAngle) {
+        // lineR has theta that is 180 degrees rotated
+        thetaR -= M_PI;
+        // update theta
+        lineR->setTheta(thetaR);
+    }
+    if (dBR > bahtinovMaskAngle && dBG > bahtinovMaskAngle) {
+        // lineB has theta that is 180 degrees rotated
+        thetaB -= M_PI;
+        // update theta
+        lineB->setTheta(thetaB);
+    }
+    if (dGR > bahtinovMaskAngle && dBG > bahtinovMaskAngle) {
+        // lineG has theta that is 180 degrees rotated
+        thetaG -= M_PI;
+        // update theta
+        lineG->setTheta(thetaG);
+    }
+    // Now sort top3lines array according to calculated new angles
+    qSort(top3Lines.begin(),top3Lines.end(), HoughLine::compareByTheta);
 }
 
 /**

@@ -15,10 +15,12 @@
 /**
  * Initialises the hough line
  */
-HoughLine::HoughLine(double theta, double r, int width, int height)
+HoughLine::HoughLine(double theta, double r, int width, int height, int score, QObject *parent)
+    : QObject(parent)
 {
     this->theta = theta;
     this->r = r;
+    this->score = score;
 
     // During processing h_h is doubled so that -ve r values
     int houghHeight = (int) (qSqrt(2) * qMax(height, width)) / 2;
@@ -52,12 +54,44 @@ HoughLine::HoughLine(double theta, double r, int width, int height)
     endPoint.setY(y2);
 }
 
-QPointF HoughLine::getBeginPoint() const {
+QPointF HoughLine::getBeginPoint() const
+{
     return beginPoint;
 }
 
-QPointF HoughLine::getEndPoint() const {
+QPointF HoughLine::getEndPoint() const
+{
     return endPoint;
+}
+
+int HoughLine::getScore() const
+{
+    return score;
+}
+
+double HoughLine::getR() const
+{
+    return r;
+}
+
+double HoughLine::getTheta() const
+{
+    return theta;
+}
+
+void HoughLine::setTheta(const double theta)
+{
+    this->theta = theta;
+}
+
+bool HoughLine::compareByScore(const HoughLine *line1,const HoughLine *line2)
+{
+    return (line1->getScore() < line2->getScore());
+}
+
+bool HoughLine::compareByTheta(const HoughLine *line1,const HoughLine *line2)
+{
+    return (line1->getTheta() < line2->getTheta());
 }
 
 /**
@@ -102,12 +136,10 @@ HoughLine::IntersectResult HoughLine::Intersect(const HoughLine& other_line, QPo
 double HoughLine::Magnitude(const QPointF& point1, const QPointF& point2)
 {
     QPointF vector = point2 - point1;
-//    vector.setX(point2.x - point1.x);
-//    vector.setY(point2.y - point1.y);
     return qSqrt(vector.x() * vector.x() + vector.y() * vector.y());
 }
 
-bool HoughLine::DistancePointLine(const QPointF& point, QPointF& intersection, float& distance)
+bool HoughLine::DistancePointLine(const QPointF& point, QPointF& intersection, double& distance)
 {
     double lineMag = Magnitude(endPoint, beginPoint);
 

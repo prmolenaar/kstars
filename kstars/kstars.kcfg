@@ -1823,6 +1823,10 @@
          <label>Relative percentage strength of centroid edge pixel strength to average pixel value.</label>
          <default>150</default>
       </entry>
+      <entry name="FocusBahtinovThreshold" type="Int">
+         <label>Bahtinov threshold value. The threshold for detecting the lines in the star image.</label>
+         <default>150</default>
+      </entry>
       <entry name="FocusDetection" type="UInt">
          <label>Star detection algorithm</label>
          <default>0</default>

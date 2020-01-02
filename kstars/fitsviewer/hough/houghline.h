@@ -33,15 +33,49 @@ class HoughLine : public QObject
         INTERESECTING
     };
 
-    HoughLine(double theta, double r, int width, int height);
+    HoughLine(double theta, double r, int width, int height, int score, QObject *parent = 0);
     IntersectResult Intersect(const HoughLine& other_line, QPointF& intersection);
-    bool DistancePointLine(const QPointF& point, QPointF& intersection, float& distance);
+    bool DistancePointLine(const QPointF& point, QPointF& intersection, double& distance);
     QPointF getBeginPoint() const;
     QPointF getEndPoint() const;
+    int getScore() const;
+    double getR() const;
+    double getTheta() const;
+    void setTheta(const double theta);
+
+	// TODO PRM: Check if these methods are necessary!
+    HoughLine(const HoughLine &other)
+        : QObject(other.parent())
+    {
+        *this = other;
+    }
+    HoughLine& operator=(const HoughLine &other)
+    {
+        theta = other.getTheta();
+        r = other.getR();
+        score = other.getScore();
+        beginPoint = other.getBeginPoint();
+        endPoint = other.getEndPoint();
+        return *this;
+    }
+    bool operator<(const HoughLine &other) const
+    {
+        return (score < other.getScore());
+    }
+
+    static bool compareByScore(const HoughLine *line1,const HoughLine *line2);
+    static bool compareByTheta(const HoughLine *line1,const HoughLine *line2);
+
+    void printHoughLine()
+    {
+        printf("Houghline: [s:%d, r:%.2f, theta:%.2f, p1:%.2f,%.2f, p1:%.2f,%.2f]\r\n",
+               score, r, theta, beginPoint.x(), beginPoint.y(), endPoint.x(), endPoint.y());
+    }
 
   private:
     double Magnitude(const QPointF& point1, const QPointF& point2);
 
+    int score;
     double theta;
     double r;
     QPointF beginPoint;

@@ -636,6 +636,7 @@ void Focus::start()
                                 << " Full frame: " << ( useFullField->isChecked() ? "yes" : "no " )
                                 << " [" << fullFieldInnerRing->value() << "%," << fullFieldOuterRing->value() << "%]"
                                 << " Step Size: " << stepIN->value() << " Threshold: " << thresholdSpin->value()
+                                << " Bahtinov Threshold: " << bahtinovThresholdSpin->value()
                                 << " Tolerance: " << toleranceIN->value()
                                 << " Frames: " << 1 /*focusFramesSpin->value()*/ << " Maximum Travel: " << maxTravelIN->value();
 
@@ -3148,6 +3149,8 @@ void Focus::syncSettings()
             Options::setFocusMaxSingleStep(sb->value());
         else if (sb == focusFramesSpin)
             Options::setFocusFramesCount(sb->value());
+        else if (sb == bahtinovThresholdSpin)
+            Options::setFocusBahtinovThreshold(sb->value());
     }
     else if ( (cb = qobject_cast<QCheckBox*>(sender())))
     {
@@ -3240,8 +3243,6 @@ void Focus::loadSettings()
     maxSingleStepIN->setValue(Options::focusMaxSingleStep());
     // Tolerance
     toleranceIN->setValue(Options::focusTolerance());
-    // Threshold spin
-    thresholdSpin->setValue(Options::focusThreshold());
     // Focus Algorithm
     focusAlgorithm = static_cast<FocusAlgorithm>(Options::focusAlgorithm());
     focusAlgorithmCombo->setCurrentIndex(focusAlgorithm);
@@ -3249,7 +3250,12 @@ void Focus::loadSettings()
     focusFramesSpin->setValue(Options::focusFramesCount());
     // Focus Detection
     focusDetection = static_cast<StarAlgorithm>(Options::focusDetection());
+    // Threshold spin
+    thresholdSpin->setValue(Options::focusThreshold());
     thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
+    // Bahtinov Threshold spin
+    bahtinovThresholdSpin->setValue(Options::focusBahtinovThreshold());
+    bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     focusDetectionCombo->setCurrentIndex(focusDetection);
     if (focusDetection == ALGORITHM_HOUGH)
     {
@@ -3257,7 +3263,6 @@ void Focus::loadSettings()
     }
     useAutoStar->setEnabled(focusDetection != ALGORITHM_HOUGH);
     // Auto Star?
-    bool autoStarEnabled = Options::focusAutoStarEnabled();
     useAutoStar->setChecked(Options::focusAutoStarEnabled());
 }
 
@@ -3296,6 +3301,7 @@ void Focus::initSettingsConnections()
     connect(maxSingleStepIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(toleranceIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(thresholdSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
+    connect(bahtinovThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
 
     connect(focusAlgorithmCombo, static_cast<void(QComboBox::*)(const QString &)>(&QComboBox::activated), this, &Ekos::Focus::syncSettings);
     connect(focusFramesSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
@@ -3514,6 +3520,7 @@ void Focus::initConnections()
     {
         focusDetection = static_cast<StarAlgorithm>(index);
         thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
+        bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         if (focusDetection == ALGORITHM_HOUGH)
         {
             // In case of Bahtinov mask uncheck auto select star
