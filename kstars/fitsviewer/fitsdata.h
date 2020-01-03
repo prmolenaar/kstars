@@ -77,7 +77,8 @@ class BahtinovEdge : public Edge
 {
     public:
         virtual ~BahtinovEdge() = default;
-        QVector<QLine> line;
+        QVector<QLineF> line;
+        QPointF offset;
 };
 
 class FITSSkyObject : public QObject

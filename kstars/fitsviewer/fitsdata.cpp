@@ -1119,27 +1119,26 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             double distance;
             if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
                 printf("Returned Offset is %.2f", distance);
-                double factor = 50.0;
-                QPointF offsetVector = (intersectionOnMidLine - intersection);
-                offsetVector *= factor;
 
                 // Add star center to selected stars
                 // Maximum Radius
                 int maxR = qMin(subW - 1, subH - 1) / 2;
-                Edge * center  = new BahtinovEdge;
+                BahtinovEdge* center  = new BahtinovEdge();
                 center->width = maxR * 2; // TODO PRM: Adjust to distance?
                 center->x     = intersection.x();
                 center->y     = intersection.y();
                 // Set distance value in HFR
                 center->HFR   = distance;
 
-                // TODO PRM: Fill BahtinovEdge->line vector with line coordinates
-                // TODO PRM: Check development on focus module at http://knro.blogspot.com/2019/11/kstars-v337-released.html
-                // TODO PRM: Also usefull: https://doc.qt.io/archives/qt-4.8/qtalgorithms.html#qGreater
+                center->offset = intersectionOnMidLine;
+                center->line.append(*oneLine);
+                center->line.append(*midLine);
+                center->line.append(*otherLine);
 
                 qCDebug(KSTARS_FITS) << "FITS: Bahtinov Center is X: " << center->x << " Y: " << center->y << " Width: " << center->width;
 
-                // TODO PRM: starCenters.append(center);
+                // TODO PRM: If needed, will a cast to (Edge*) have impact on drawing in fitsview.cpp?
+                data->appendStar(center);
             }
             else
             {

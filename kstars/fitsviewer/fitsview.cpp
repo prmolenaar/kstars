@@ -777,21 +777,40 @@ void FITSView::drawStarCentroid(QPainter * painter)
 
     foreach (auto const &starCenter, imageData->getStarCenters())
     {
-        int const x1 = std::round((starCenter->x - starCenter->width / 2.0f) * ratio);
-        int const y1 = std::round((starCenter->y - starCenter->width / 2.0f) * ratio);
+        int const xc = std::round((starCenter->x - starCenter->width / 2.0f) * ratio);
+        int const yc = std::round((starCenter->y - starCenter->width / 2.0f) * ratio);
         int const w  = std::round(starCenter->width * ratio);
 
         BahtinovEdge* bEdge = dynamic_cast<BahtinovEdge*>(starCenter);
         if (bEdge != nullptr)
         {
-            // TODO PRM: Use BahtinovEdge line vector to draw lines and circles
-            // Draw a circle around the detected star
-            painter->drawEllipse(x1, y1, w, w);
+            // Draw lines of diffraction pattern
+            for (int index = 0; index < bEdge->line.size(); index++) {
+                QLineF line = bEdge->line[index];
+                painter->setPen(QPen(Qt::green, 3));
+                painter->drawLine(line);
+            }
+
+            // Draw center circle
+            painter->setPen(QPen(Qt::white, 3));
+            painter->drawEllipse(xc, yc, w, w);
+
+            // Draw offset circle
+            double factor = 20.0;
+            QPointF offsetVector = (bEdge->offset - QPointF(starCenter->x, starCenter->y)) * factor;
+            int const xo = std::round((starCenter->x + offsetVector.x() - starCenter->width / 2.0f) * ratio);
+            int const yo = std::round((starCenter->y + offsetVector.x() - starCenter->width / 2.0f) * ratio);
+            painter->setPen(QPen(Qt::red, 3));
+            painter->drawEllipse(xo, yo, w, w);
+
+            // Draw line between center circle and offset circle
+            painter->setPen(QPen(Qt::red, 3));
+            painter->drawLine(xc, yc, xo, yo);
         }
         else
         {
             // Draw a circle around the detected star
-            painter->drawEllipse(x1, y1, w, w);
+            painter->drawEllipse(xc, yc, w, w);
         }
 
         if (showStarsHFR)
@@ -801,7 +820,7 @@ void FITSView::drawStarCentroid(QPainter * painter)
             QSize const hfrSize = fontMetrics.size(Qt::TextSingleLine, hfr);
 
             // Store the HFR text in a rect
-            QPoint const hfrBottomLeft(x1+w+5, y1+w/2);
+            QPoint const hfrBottomLeft(xc + w + 5, yc + w / 2);
             QRect const hfrRect(hfrBottomLeft.x(), hfrBottomLeft.y() - hfrSize.height(), hfrSize.width(), hfrSize.height());
 
             // Render the HFR text only if it can be displayed entirely

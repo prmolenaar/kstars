@@ -10,8 +10,9 @@
 #ifndef HOUGHLINE_H_
 #define HOUGHLINE_H_
 
-#include <QtCore/QObject>
+#include <QLineF>
 #include <QPointF>
+#include <stdio.h>
 
 /**
  * @class HoughLine
@@ -20,12 +21,9 @@
  * @author Patrick Molenaar
  * @version 1.0
  */
-class HoughLine : public QObject
+class HoughLine : public QLineF
 {
-    Q_OBJECT
-
   public:
-
     enum IntersectResult {
         PARALLEL,
         COINCIDENT,
@@ -33,31 +31,31 @@ class HoughLine : public QObject
         INTERESECTING
     };
 
-    HoughLine(double theta, double r, int width, int height, int score, QObject *parent = 0);
+    HoughLine(double theta, double r, int width, int height, int score);
+    virtual ~HoughLine() = default;
     IntersectResult Intersect(const HoughLine& other_line, QPointF& intersection);
     bool DistancePointLine(const QPointF& point, QPointF& intersection, double& distance);
-    QPointF getBeginPoint() const;
-    QPointF getEndPoint() const;
     int getScore() const;
     double getR() const;
     double getTheta() const;
     void setTheta(const double theta);
 
 	// TODO PRM: Check if these methods are necessary!
-    HoughLine(const HoughLine &other)
-        : QObject(other.parent())
+    HoughLine(const HoughLine &other) : QLineF(other.p1(), other.p2())
     {
         *this = other;
     }
+
     HoughLine& operator=(const HoughLine &other)
     {
         theta = other.getTheta();
         r = other.getR();
         score = other.getScore();
-        beginPoint = other.getBeginPoint();
-        endPoint = other.getEndPoint();
+        setP1(other.p1());
+        setP2(other.p2());
         return *this;
     }
+
     bool operator<(const HoughLine &other) const
     {
         return (score < other.getScore());
@@ -69,7 +67,7 @@ class HoughLine : public QObject
     void printHoughLine()
     {
         printf("Houghline: [s:%d, r:%.2f, theta:%.2f, p1:%.2f,%.2f, p1:%.2f,%.2f]\r\n",
-               score, r, theta, beginPoint.x(), beginPoint.y(), endPoint.x(), endPoint.y());
+               score, r, theta, p1().x(), p1().y(), p2().x(), p2().y());
     }
 
   private:

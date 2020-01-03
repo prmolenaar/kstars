@@ -76,3 +76,14 @@ doc/index.cache.bz2
 kstars/*adaptor.cpp
 kstars/*adaptor.h
 unitybuild_*.cpp
+*_autogen/
+datahandlers/*_debug.cpp
+datahandlers/*_debug.h
+kstars/*_debug.cpp
+kstars/*_debug.h
+Tests/kstars_ui/__/
+Tests/kstars_ui/kstars_ui_tests
+Tests/kstars_ui/qrc_kstars.cpp
+kstars/kstarslib_export.h
+prefix.sh
+test_nodump.cc

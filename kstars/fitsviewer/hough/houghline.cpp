@@ -10,13 +10,12 @@
 #include "houghline.h"
 
 #include <qmath.h>
-#include <QPointF>
 
 /**
  * Initialises the hough line
  */
-HoughLine::HoughLine(double theta, double r, int width, int height, int score, QObject *parent)
-    : QObject(parent)
+HoughLine::HoughLine(double theta, double r, int width, int height, int score)
+    : QLineF()
 {
     this->theta = theta;
     this->r = r;
@@ -48,20 +47,8 @@ HoughLine::HoughLine(double theta, double r, int width, int height, int score, Q
         y1 = ((((r - houghHeight) - ((x1 - centerX) * cosTheta)) / sinTheta) + centerY);
         y2 = ((((r - houghHeight) - ((x2 - centerX) * cosTheta)) / sinTheta) + centerY);
     }
-    beginPoint.setX(x1);
-    beginPoint.setY(y1);
-    endPoint.setX(x2);
-    endPoint.setY(y2);
-}
-
-QPointF HoughLine::getBeginPoint() const
-{
-    return beginPoint;
-}
-
-QPointF HoughLine::getEndPoint() const
-{
-    return endPoint;
+    setP1(QPointF(x1, y1));
+    setP2(QPointF(x2, y2));
 }
 
 int HoughLine::getScore() const
@@ -97,18 +84,18 @@ bool HoughLine::compareByTheta(const HoughLine *line1,const HoughLine *line2)
 /**
  * Sources for intersection and distance calculations came from
  *     http://paulbourke.net/geometry/pointlineplane/
- * Also check https://doc.qt.io/archives/qt-4.8/qlinef.html for more line methods!
+ * Also check https://doc.qt.io/archives/qt-4.8/qlinef.html for more line methods
  */
 HoughLine::IntersectResult HoughLine::Intersect(const HoughLine& other_line, QPointF& intersection)
 {
-    double denom = ((other_line.getEndPoint().y() - other_line.getBeginPoint().y()) * (endPoint.x() - beginPoint.x())) -
-            ((other_line.getEndPoint().x() - other_line.getBeginPoint().x()) * (endPoint.y() - beginPoint.y()));
+    double denom = ((other_line.p2().y() - other_line.p1().y()) * (p2().x() - p1().x())) -
+            ((other_line.p2().x() - other_line.p1().x()) * (p2().y() - p1().y()));
 
-    double nume_a = ((other_line.getEndPoint().x() - other_line.getBeginPoint().x()) * (beginPoint.y() - other_line.getBeginPoint().y())) -
-            ((other_line.getEndPoint().y() - other_line.getBeginPoint().y()) * (beginPoint.x() - other_line.getBeginPoint().x()));
+    double nume_a = ((other_line.p2().x() - other_line.p1().x()) * (p1().y() - other_line.p1().y())) -
+            ((other_line.p2().y() - other_line.p1().y()) * (p1().x() - other_line.p1().x()));
 
-    double nume_b = ((endPoint.x() - beginPoint.x()) * (beginPoint.y() - other_line.getBeginPoint().y())) -
-            ((endPoint.y() - beginPoint.y()) * (beginPoint.x() - other_line.getBeginPoint().x()));
+    double nume_b = ((p2().x() - p1().x()) * (p1().y() - other_line.p1().y())) -
+            ((p2().y() - p1().y()) * (p1().x() - other_line.p1().x()));
 
     if (denom == 0.0f)
     {
@@ -125,8 +112,8 @@ HoughLine::IntersectResult HoughLine::Intersect(const HoughLine& other_line, QPo
     if(ua >= 0.0f && ua <= 1.0f && ub >= 0.0f && ub <= 1.0f)
     {
         // Get the intersection point.
-        intersection.setX(qreal(beginPoint.x() + ua * (endPoint.x() - beginPoint.x())));
-        intersection.setY(qreal(beginPoint.y() + ua * (endPoint.y() - beginPoint.y())));
+        intersection.setX(qreal(p1().x() + ua * (p2().x() - p1().x())));
+        intersection.setY(qreal(p1().y() + ua * (p2().y() - p1().y())));
         return INTERESECTING;
     }
 
@@ -141,18 +128,18 @@ double HoughLine::Magnitude(const QPointF& point1, const QPointF& point2)
 
 bool HoughLine::DistancePointLine(const QPointF& point, QPointF& intersection, double& distance)
 {
-    double lineMag = Magnitude(endPoint, beginPoint);
+    double lineMag = length();
 
-    double U = qreal((((point.x() - beginPoint.x()) * (endPoint.x() - beginPoint.x())) +
-            ((point.y() - beginPoint.y()) * (endPoint.y() - beginPoint.y()))) /
+    double U = qreal((((point.x() - p1().x()) * (p2().x() - p1().x())) +
+            ((point.y() - p1().y()) * (p2().y() - p1().y()))) /
             (lineMag * lineMag));
 
     if (U < 0.0 || U > 1.0) {
         return false; // closest point does not fall within the line segment
     }
 
-    intersection.setX(beginPoint.x() + U * (endPoint.x() - beginPoint.x()));
-    intersection.setY(beginPoint.y() + U * (endPoint.y() - beginPoint.y()));
+    intersection.setX(p1().x() + U * (p2().x() - p1().x()));
+    intersection.setY(p1().y() + U * (p2().y() - p1().y()));
 
     distance = Magnitude(point, intersection);
 
