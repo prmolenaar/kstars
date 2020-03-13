@@ -453,6 +453,9 @@ class FITSData : public QObject
 
         QString getLastError() const;
 
+        template <typename T>
+        void savePNG(const QString &filename, T * data = nullptr);
+
     signals:
         void converted(QImage);
 

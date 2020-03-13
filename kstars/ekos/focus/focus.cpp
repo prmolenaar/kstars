@@ -636,6 +636,8 @@ void Focus::start()
                                 << " Full frame: " << ( useFullField->isChecked() ? "yes" : "no " )
                                 << " [" << fullFieldInnerRing->value() << "%," << fullFieldOuterRing->value() << "%]"
                                 << " Step Size: " << stepIN->value() << " Threshold: " << thresholdSpin->value()
+                                << " Bahtinov Low Threshold: " << bahtinovLowThresholdSpin->value()
+                                << " Bahtinov High Threshold: " << bahtinovHighThresholdSpin->value()
                                 << " Bahtinov Threshold: " << bahtinovThresholdSpin->value()
                                 << " Tolerance: " << toleranceIN->value()
                                 << " Frames: " << 1 /*focusFramesSpin->value()*/ << " Maximum Travel: " << maxTravelIN->value();
@@ -3149,6 +3151,10 @@ void Focus::syncSettings()
             Options::setFocusMaxSingleStep(sb->value());
         else if (sb == focusFramesSpin)
             Options::setFocusFramesCount(sb->value());
+        else if (sb == bahtinovLowThresholdSpin)
+            Options::setFocusBahtinovLowThreshold(sb->value());
+        else if (sb == bahtinovHighThresholdSpin)
+            Options::setFocusBahtinovHighThreshold(sb->value());
         else if (sb == bahtinovThresholdSpin)
             Options::setFocusBahtinovThreshold(sb->value());
     }
@@ -3231,8 +3237,6 @@ void Focus::loadSettings()
     // Guide Setting time
     GuideSettleTime->setValue(Options::guideSettleTime());
 
-    // Box Size
-    focusBoxSize->setValue(Options::focusBoxSize());
     // Max Travel
     if (Options::focusMaxTravel() > maxTravelIN->maximum())
         maxTravelIN->setMaximum(Options::focusMaxTravel());
@@ -3254,13 +3258,28 @@ void Focus::loadSettings()
     thresholdSpin->setValue(Options::focusThreshold());
     thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
     // Bahtinov Threshold spin
+    bahtinovLowThresholdSpin->setValue(Options::focusBahtinovLowThreshold());
+    bahtinovHighThresholdSpin->setValue(Options::focusBahtinovHighThreshold());
     bahtinovThresholdSpin->setValue(Options::focusBahtinovThreshold());
+    bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+    bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     focusDetectionCombo->setCurrentIndex(focusDetection);
     if (focusDetection == ALGORITHM_HOUGH)
     {
         Options::setFocusAutoStarEnabled(false);
+        focusBoxSize->setMaximum(512);
     }
+    else
+    {
+        // When not using Bathinov mask, limit box size to 256 and make sure value stays within range.
+        if (Options::focusBoxSize() > 256) {
+            Options::setFocusBoxSize(32);
+        }
+        focusBoxSize->setMaximum(256);
+    }
+    // Box Size
+    focusBoxSize->setValue(Options::focusBoxSize());
     useAutoStar->setEnabled(focusDetection != ALGORITHM_HOUGH);
     // Auto Star?
     useAutoStar->setChecked(Options::focusAutoStarEnabled());
@@ -3301,6 +3320,8 @@ void Focus::initSettingsConnections()
     connect(maxSingleStepIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(toleranceIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(thresholdSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
+    connect(bahtinovLowThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
+    connect(bahtinovHighThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
     connect(bahtinovThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
 
     connect(focusAlgorithmCombo, static_cast<void(QComboBox::*)(const QString &)>(&QComboBox::activated), this, &Ekos::Focus::syncSettings);
@@ -3520,11 +3541,25 @@ void Focus::initConnections()
     {
         focusDetection = static_cast<StarAlgorithm>(index);
         thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
+        bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         if (focusDetection == ALGORITHM_HOUGH)
         {
             // In case of Bahtinov mask uncheck auto select star
             useAutoStar->setChecked(false);
+            focusBoxSize->setMaximum(512);
+        }
+        else
+        {
+            // When not using Bathinov mask, limit box size to 256 and make sure value stays within range.
+            if (Options::focusBoxSize() > 256)
+            {
+                Options::setFocusBoxSize(32);
+                // Focus box size changed, update control
+                focusBoxSize->setValue(Options::focusBoxSize());
+            }
+            focusBoxSize->setMaximum(256);
         }
         useAutoStar->setEnabled(focusDetection != ALGORITHM_HOUGH);
     });

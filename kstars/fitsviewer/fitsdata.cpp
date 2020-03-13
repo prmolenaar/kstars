@@ -356,6 +356,60 @@ bool FITSData::privateLoad(void *fits_buffer, size_t fits_buffer_size, bool sile
     return true;
 }
 
+template <typename T>
+void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
+{
+    QImage image;
+    T * buffer = data;
+    if (buffer == nullptr) {
+        buffer = (T *)getImageBuffer();
+    }
+    const T limit   = std::numeric_limits<T>::max();
+    T bMin    = 0;
+    T bMax    = limit;
+    uint16_t w    = width();
+    uint16_t h    = height();
+    uint32_t size = w * h;
+    double val;
+
+    if (channels() == 1)
+    {
+        image = QImage(width(), height(), QImage::Format_Indexed8);
+        /* Fill in pixel values using indexed map, linear scale */
+        for (int j = 0; j < h; j++)
+        {
+            unsigned char * scanLine = image.scanLine(j);
+
+            for (int i = 0; i < w; i++)
+            {
+                val         = qBound(bMin, buffer[j * w + i], bMax);
+                scanLine[i] = qBound<unsigned char>(0, (unsigned char)val, 255);
+            }
+        }
+    }
+    else
+    {
+        image = QImage(width(), height(), QImage::Format_RGB32);
+        double rval = 0, gval = 0, bval = 0;
+        QRgb value;
+        /* Fill in pixel values using indexed map, linear scale */
+        for (int j = 0; j < h; j++)
+        {
+            auto * scanLine = reinterpret_cast<QRgb *>((image.scanLine(j)));
+            for (int i = 0; i < w; i++)
+            {
+                rval = qBound(bMin, buffer[j * w + i], bMax);
+                gval = qBound(bMin, buffer[j * w + i + size], bMax);
+                bval = qBound(bMin, buffer[j * w + i + size * 2], bMax);
+                value = qRgb(rval, gval, bval);
+                scanLine[i] = value;
+            }
+        }
+    }
+    printf("Saving to: %s\r\n", filename.toLatin1().data());
+    image.save(filename);
+}
+
 int FITSData::saveFITS(const QString &newFilename)
 {
     if (newFilename == m_Filename)
@@ -1051,14 +1105,22 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 
     boundedImage->setProperty("dataType", data->property("dataType"));
 
-    // #4 Set image buffer and calculate stats.
+    // #4 Set image buffer
     boundedImage->setImageBuffer(buffer);
 
-    boundedImage->calculateStats(true);
+//    boundedImage->calculateStats(true);
 
     // #5 Apply Median + High Contrast filter to remove noise and move data to non-linear domain
-    boundedImage->applyFilter(FITS_MEDIAN);
-    boundedImage->applyFilter(FITS_HIGH_CONTRAST);
+//    boundedImage->applyFilter(FITS_MEDIAN);
+//    boundedImage->applyFilter(FITS_HIGH_CONTRAST);
+
+    // Save boundedImage to file for debug purposes
+    QDir dir;
+    QDateTime now = KStarsData::Instance()->lt();
+    QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
+    dir.mkpath(path);
+    QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
+    QString filename;
 
     // #6 Perform Hough transform after image passed through Canny edge detection
     QVector<T> gradients;
@@ -1070,8 +1132,13 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     // Sobel, Non-Maximum Suppression, Thresholding and Canny
     boundedImage->sobel<T>(gradients, directions);
     boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
-    boundedImage->threshold<T>((T)25, (T)220, thinned, thresholded);
+    boundedImage->savePNG<T>(name + "_thinned.png", thinned.data());
+    boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(), (T)Options::focusBahtinovHighThreshold(), thinned, thresholded);
+    boundedImage->savePNG<T>(name + "_thresholded.png", thresholded.data());
     traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
+    boundedImage->savePNG<T>(name + "_hysteresis.png", traced.data());
+
+    boundedImage->savePNG<T>(name + "_original.png");
 
     // Not needed anymore
     delete boundedImage;
@@ -1118,31 +1185,34 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             QPointF intersectionOnMidLine;
             double distance;
             if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
-                printf("Returned Offset is %.2f", distance);
+                printf("Returned Offset is %.2f\r\n", distance);
 
                 // Add star center to selected stars
                 // Maximum Radius
                 int maxR = qMin(subW - 1, subH - 1) / 2;
                 BahtinovEdge* center  = new BahtinovEdge();
-                center->width = maxR * 2; // TODO PRM: Adjust to distance?
-                center->x     = intersection.x();
-                center->y     = intersection.y();
+                center->width = maxR / 2; // TODO PRM: Adjust to distance?
+                center->x     = subX + intersection.x();
+                center->y     = subY + intersection.y();
                 // Set distance value in HFR
                 center->HFR   = distance;
 
-                center->offset = intersectionOnMidLine;
+                center->offset.setX(subX + intersectionOnMidLine.x());
+                center->offset.setY(subY + intersectionOnMidLine.y());
+                oneLine->Offset(subX, subY);
+                midLine->Offset(subX, subY);
+                otherLine->Offset(subX, subY);
                 center->line.append(*oneLine);
                 center->line.append(*midLine);
                 center->line.append(*otherLine);
 
-                qCDebug(KSTARS_FITS) << "FITS: Bahtinov Center is X: " << center->x << " Y: " << center->y << " Width: " << center->width;
-
-                // TODO PRM: If needed, will a cast to (Edge*) have impact on drawing in fitsview.cpp?
+                printf("FITS: Bahtinov Center is X: %.2f, Y: %.2f, Width: %.2f\r\n",
+                       center->x, center->y, center->width);
                 data->appendStar(center);
             }
             else
             {
-                printf("closest point does not fall within the line segment.");
+                printf("closest point does not fall within the line segment.\r\n");
             }
         }
         else

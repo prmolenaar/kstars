@@ -1284,11 +1284,11 @@
                 <string/>
                </property>
                <property name="text">
-                <string>Threshold:</string>
+                <string>Thresholds:</string>
                </property>
               </widget>
              </item>
-             <item row="2" column="1">
+             <item row="2" column="3">
               <widget class="QSpinBox" name="bahtinovThresholdSpin">
                <property name="enabled">
                 <bool>false</bool>
@@ -1310,6 +1310,56 @@
                </property>
                <property name="value">
                 <number>30</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="2">
+              <widget class="QSpinBox" name="bahtinovHighThresholdSpin">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Bahtinov upper threshold. Decrease if not all three lines of the Bahtinov mask pattern are detected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+               </property>
+               <property name="minimum">
+                <number>1</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="value">
+                <number>200</number>
+               </property>
+              </widget>
+             </item>
+             <item row="2" column="1">
+              <widget class="QSpinBox" name="bahtinovLowThresholdSpin">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="toolTip">
+                <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Bahtinov lower threshold. Decrease if not all three lines of the Bahtinov mask pattern are detected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+               </property>
+               <property name="minimum">
+                <number>1</number>
+               </property>
+               <property name="maximum">
+                <number>255</number>
+               </property>
+               <property name="value">
+                <number>20</number>
                </property>
               </widget>
              </item>

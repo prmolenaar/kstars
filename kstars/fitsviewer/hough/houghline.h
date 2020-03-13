@@ -70,6 +70,8 @@ class HoughLine : public QLineF
                score, r, theta, p1().x(), p1().y(), p2().x(), p2().y());
     }
 
+    void Offset(const int offsetX, const int offsetY);
+
   private:
     double Magnitude(const QPointF& point1, const QPointF& point2);
 

@@ -145,3 +145,9 @@ bool HoughLine::DistancePointLine(const QPointF& point, QPointF& intersection, d
 
     return true;
 }
+
+void HoughLine::Offset(const int offsetX, const int offsetY)
+{
+    setP1(QPointF(p1().x() + offsetX, p1().y() + offsetY));
+    setP2(QPointF(p2().x() + offsetX, p2().y() + offsetY));
+}

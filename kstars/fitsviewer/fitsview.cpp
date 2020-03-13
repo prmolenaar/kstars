@@ -780,19 +780,21 @@ void FITSView::drawStarCentroid(QPainter * painter)
         int const xc = std::round((starCenter->x - starCenter->width / 2.0f) * ratio);
         int const yc = std::round((starCenter->y - starCenter->width / 2.0f) * ratio);
         int const w  = std::round(starCenter->width * ratio);
+        int const hw = w / 2;
 
         BahtinovEdge* bEdge = dynamic_cast<BahtinovEdge*>(starCenter);
         if (bEdge != nullptr)
         {
             // Draw lines of diffraction pattern
-            for (int index = 0; index < bEdge->line.size(); index++) {
-                QLineF line = bEdge->line[index];
-                painter->setPen(QPen(Qt::green, 3));
-                painter->drawLine(line);
-            }
+            painter->setPen(QPen(Qt::red, 2));
+            painter->drawLine(bEdge->line[0].x1() * ratio, bEdge->line[0].y1() * ratio, bEdge->line[0].x2() * ratio, bEdge->line[0].y2() * ratio);
+            painter->setPen(QPen(Qt::green, 2));
+            painter->drawLine(bEdge->line[1].x1() * ratio, bEdge->line[1].y1() * ratio, bEdge->line[1].x2() * ratio, bEdge->line[1].y2() * ratio);
+            painter->setPen(QPen(Qt::blue, 2));
+            painter->drawLine(bEdge->line[2].x1() * ratio, bEdge->line[2].y1() * ratio, bEdge->line[2].x2() * ratio, bEdge->line[2].y2() * ratio);
 
             // Draw center circle
-            painter->setPen(QPen(Qt::white, 3));
+            painter->setPen(QPen(Qt::white, 2));
             painter->drawEllipse(xc, yc, w, w);
 
             // Draw offset circle
@@ -800,12 +802,12 @@ void FITSView::drawStarCentroid(QPainter * painter)
             QPointF offsetVector = (bEdge->offset - QPointF(starCenter->x, starCenter->y)) * factor;
             int const xo = std::round((starCenter->x + offsetVector.x() - starCenter->width / 2.0f) * ratio);
             int const yo = std::round((starCenter->y + offsetVector.x() - starCenter->width / 2.0f) * ratio);
-            painter->setPen(QPen(Qt::red, 3));
+            painter->setPen(QPen(Qt::red, 2));
             painter->drawEllipse(xo, yo, w, w);
 
             // Draw line between center circle and offset circle
-            painter->setPen(QPen(Qt::red, 3));
-            painter->drawLine(xc, yc, xo, yo);
+            painter->setPen(QPen(Qt::yellow, 2));
+            painter->drawLine(xc + hw, yc + hw, xo + hw, yo + hw);
         }
         else
         {
