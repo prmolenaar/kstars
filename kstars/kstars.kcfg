@@ -1835,6 +1835,10 @@
          <label>Bahtinov threshold value. The threshold for detecting the lines in the star image.</label>
          <default>150</default>
       </entry>
+      <entry name="StoreIntermediateResult" type="Bool">
+         <label>Store the intermediate bahtinov mask image processing results to disk.</label>
+         <default>false</default>
+      </entry>
       <entry name="FocusDetection" type="UInt">
          <label>Star detection algorithm</label>
          <default>0</default>

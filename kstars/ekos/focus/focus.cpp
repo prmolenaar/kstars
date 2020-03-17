@@ -629,11 +629,13 @@ void Focus::start()
     //    Options::setUseFocusDarkFrame(darkFrameCheck->isChecked());
     //    Options::setFocusFramesCount(focusFramesSpin->value());
     //    Options::setFocusUseFullField(useFullField->isChecked());
+    //    Options::setStoreIntermediateResult(storeIntermediateResultCheck->isChecked());
 
     qCDebug(KSTARS_EKOS_FOCUS)  << "Starting focus with box size: " << focusBoxSize->value()
                                 << " Subframe: " << ( useSubFrame->isChecked() ? "yes" : "no" )
                                 << " Autostar: " << ( useAutoStar->isChecked() ? "yes" : "no" )
                                 << " Full frame: " << ( useFullField->isChecked() ? "yes" : "no " )
+                                << " Store intermediate result: " << ( storeIntermediateResultCheck->isChecked() ? "yes" : "no" )
                                 << " [" << fullFieldInnerRing->value() << "%," << fullFieldOuterRing->value() << "%]"
                                 << " Step Size: " << stepIN->value() << " Threshold: " << thresholdSpin->value()
                                 << " Bahtinov Low Threshold: " << bahtinovLowThresholdSpin->value()
@@ -3173,6 +3175,8 @@ void Focus::syncSettings()
             Options::setFocusUseFullField(cb->isChecked());
         else if (cb == suspendGuideCheck)
             Options::setSuspendGuiding(cb->isChecked());
+        else if (cb == storeIntermediateResultCheck)
+            Options::setStoreIntermediateResult(cb->isChecked());
     }
     else if ( (cbox = qobject_cast<QComboBox*>(sender())))
     {
@@ -3236,6 +3240,8 @@ void Focus::loadSettings()
     suspendGuideCheck->setChecked(Options::suspendGuiding());
     // Guide Setting time
     GuideSettleTime->setValue(Options::guideSettleTime());
+    // Store intermediate bahtinov mask processed images to disk?
+    storeIntermediateResultCheck->setChecked(Options::storeIntermediateResult());
 
     // Max Travel
     if (Options::focusMaxTravel() > maxTravelIN->maximum())
@@ -3261,9 +3267,11 @@ void Focus::loadSettings()
     bahtinovLowThresholdSpin->setValue(Options::focusBahtinovLowThreshold());
     bahtinovHighThresholdSpin->setValue(Options::focusBahtinovHighThreshold());
     bahtinovThresholdSpin->setValue(Options::focusBahtinovThreshold());
+    storeIntermediateResultCheck->setChecked(Options::storeIntermediateResult());
     bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+    storeIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
     focusDetectionCombo->setCurrentIndex(focusDetection);
     if (focusDetection == ALGORITHM_HOUGH)
     {
@@ -3313,6 +3321,7 @@ void Focus::initSettingsConnections()
     connect(fullFieldOuterRing, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(suspendGuideCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
     connect(GuideSettleTime, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
+    connect(storeIntermediateResultCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
 
     connect(focusBoxSize, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
     connect(maxTravelIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
@@ -3544,6 +3553,7 @@ void Focus::initConnections()
         bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        storeIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
         if (focusDetection == ALGORITHM_HOUGH)
         {
             // In case of Bahtinov mask uncheck auto select star

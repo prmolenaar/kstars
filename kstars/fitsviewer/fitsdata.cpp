@@ -1132,14 +1132,18 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     // Sobel, Non-Maximum Suppression, Thresholding and Canny
     boundedImage->sobel<T>(gradients, directions);
     boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
-    boundedImage->savePNG<T>(name + "_thinned.png", thinned.data());
+    if (Options::storeIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_thinned.png", thinned.data());
+    }
     boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(), (T)Options::focusBahtinovHighThreshold(), thinned, thresholded);
-    boundedImage->savePNG<T>(name + "_thresholded.png", thresholded.data());
+    if (Options::storeIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_thresholded.png", thresholded.data());
+    }
     traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
-    boundedImage->savePNG<T>(name + "_hysteresis.png", traced.data());
-
-    boundedImage->savePNG<T>(name + "_original.png");
-
+    if (Options::storeIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_hysteresis.png", traced.data());
+        boundedImage->savePNG<T>(name + "_original.png");
+    }
     // Not needed anymore
     delete boundedImage;
 
