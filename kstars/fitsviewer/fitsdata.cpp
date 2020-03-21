@@ -406,8 +406,9 @@ void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
             }
         }
     }
-    printf("Saving to: %s\r\n", filename.toLatin1().data());
+
     image.save(filename);
+    qCInfo(KSTARS_FITS) << "Saved image file:" << filename;
 }
 
 int FITSData::saveFITS(const QString &newFilename)
@@ -1108,12 +1109,6 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     // #4 Set image buffer
     boundedImage->setImageBuffer(buffer);
 
-//    boundedImage->calculateStats(true);
-
-    // #5 Apply Median + High Contrast filter to remove noise and move data to non-linear domain
-//    boundedImage->applyFilter(FITS_MEDIAN);
-//    boundedImage->applyFilter(FITS_HIGH_CONTRAST);
-
     // Save boundedImage to file for debug purposes
     QDir dir;
     QDateTime now = KStarsData::Instance()->lt();
@@ -1129,20 +1124,34 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     QVector<T> thresholded;
     QVector<T> traced;
 
+    // Save original image
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_original_0.png");
+    }
+
+    // Apply gaussian blur
+    if (Options::focusBahtinovGaussianBlur()) {
+        boundedImage->applyFilter(FITS_GAUSSIAN);
+        if (Options::focusBahtinovStoreIntermediateResult()) {
+            boundedImage->savePNG<T>(name + "_gaussian_1.png");
+        }
+    }
+
     // Sobel, Non-Maximum Suppression, Thresholding and Canny
     boundedImage->sobel<T>(gradients, directions);
     boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
-    if (Options::storeIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_thinned.png", thinned.data());
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_thinned_2.png", thinned.data());
     }
-    boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(), (T)Options::focusBahtinovHighThreshold(), thinned, thresholded);
-    if (Options::storeIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_thresholded.png", thresholded.data());
+    boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(),
+                               (T)Options::focusBahtinovHighThreshold(),
+                               thinned, thresholded);
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_thresholded_3.png", thresholded.data());
     }
     traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
-    if (Options::storeIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_hysteresis.png", traced.data());
-        boundedImage->savePNG<T>(name + "_original.png");
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        boundedImage->savePNG<T>(name + "_hysteresis_4.png", traced.data());
     }
     // Not needed anymore
     delete boundedImage;
@@ -1164,7 +1173,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     {
         htf.getSortedTopThreeLines(houghLines, top3Lines);
 
-        // Print debug information
+        /* Print debug information
         printf("houghLines:\r\n");
         foreach (HoughLine* ln, houghLines)
         {
@@ -1176,6 +1185,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             ln->printHoughLine();
         }
         fflush(stdout);
+        */
 
         // Determine intersection between outer lines
         HoughLine* oneLine = top3Lines[0];
@@ -1189,7 +1199,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             QPointF intersectionOnMidLine;
             double distance;
             if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
-                printf("Returned Offset is %.2f\r\n", distance);
+                // printf("Returned Offset is %.2f\r\n", distance);
 
                 // Add star center to selected stars
                 // Maximum Radius
@@ -1210,8 +1220,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
                 center->line.append(*midLine);
                 center->line.append(*otherLine);
 
-                printf("FITS: Bahtinov Center is X: %.2f, Y: %.2f, Width: %.2f\r\n",
-                       center->x, center->y, center->width);
+                // printf("FITS: Bahtinov Center is X: %.2f, Y: %.2f, Width: %.2f\r\n", center->x, center->y, center->width);
                 data->appendStar(center);
             }
             else
@@ -2554,6 +2563,10 @@ void FITSData::applyFilter(FITSScale type, uint8_t * targetImage, QVector<double
             flipVCounter++;
             break;
 
+        case FITS_GAUSSIAN:
+            gaussianBlur<T>(Options::focusBahtinovKernelSize(), Options::focusBahtinovSigma());
+            break;
+
         default:
             break;
     }
@@ -3781,6 +3794,114 @@ double FITSData::getADU() const
  * Web-Site: https://github.com/hipersayanX/CannyDetector
  */
 
+QVector<double> FITSData::createGaussianKernel(int size, double sigma)
+{
+    QVector<double> kernel(size * size);
+    kernel.fill(0.0, size * size);
+
+    double kernelSum = 0.0;
+    int fOff = (size - 1) / 2;
+    double normal = 1.0 / (2.0 * M_PI * sigma * sigma);
+    for (int y = -fOff; y <= fOff; y++) {
+        for (int x = -fOff; x <= fOff; x++) {
+            double distance = ((y * y) + (x * x)) / (2.0 * sigma * sigma);
+            int index = (y + fOff) * size + (x + fOff);
+            // kernel[y + fOff][x + fOff] = normal * Math.exp(-distance);
+            kernel[index] = normal * qExp(-distance);
+            // kernelSum += kernel[y + fOff][x + fOff];
+            kernelSum += kernel.at(index);
+        }
+    }
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int index = y * size + x;
+            // kernel[y][x] = kernel[y][x] * 1d / kernelSum;
+            kernel[index] = kernel.at(index) * 1.0 / kernelSum;
+            // printf(" [%3.5f]", kernel.at(index));
+        }
+        // printf("\n");
+    }
+
+    return kernel;
+}
+
+template <typename T>
+void FITSData::gaussianBlur(int kernelSize, double sigma)
+{
+    // Size must be an odd number!
+    if (kernelSize % 2 == 0)
+    {
+        kernelSize--;
+        printf("Warning, size must be an odd number, correcting size to %d", kernelSize);
+    }
+    // Edge must be a positive number!
+    if (kernelSize < 1)
+    {
+        kernelSize = 1;
+    }
+
+    QVector<double> gaussianKernel = createGaussianKernel(kernelSize, sigma);
+    ConvolutionFilter<T>(gaussianKernel, kernelSize);
+}
+
+template <typename T>
+void FITSData::ConvolutionFilter(const QVector<double> &kernel, int kernelSize)
+{
+    T * imagePtr = reinterpret_cast<T *>(m_ImageBuffer);
+    T maxResult = 0;
+
+    // Create variable for pixel data for each kernel
+    T gt = 0;
+
+    // This is how much your center pixel is offset from the border of your kernel
+    int fOff = (kernelSize - 1) / 2;
+
+    // Start with the pixel that is offset fOff from top and fOff from the left side
+    // this is so entire kernel is on your image
+    for (int offsetY = 0; offsetY < stats.height; offsetY++)
+    {
+        for (int offsetX = 0; offsetX < stats.width; offsetX++)
+        {
+            // reset gray value to 0
+            gt = 0;
+            // position of the kernel center pixel
+            int byteOffset = offsetY * stats.width + offsetX;
+
+            // kernel calculations
+            for (int filterY = -fOff; filterY <= fOff; filterY++)
+            {
+                for (int filterX = -fOff; filterX <= fOff; filterX++)
+                {
+                    if ((offsetY + filterY) >= 0 && (offsetY + filterY) < stats.height
+                            && ((offsetX + filterX) >= 0 && (offsetX + filterX) < stats.width ))
+                    {
+
+                        int calcOffset = byteOffset + filterX + filterY * stats.width;
+                        int index = (filterY + fOff) * kernelSize + (filterX + fOff);
+                        double kernelValue = kernel.at(index);
+                        gt += (imagePtr[calcOffset]) * kernelValue;
+                        // printf("kernel[x:%3d, y:%3d, i:%3d]=%.5f     ", filterX, filterY, index, (double)gt);
+                    }
+                    // printf("\n");
+                }
+                // printf("[x:%3d, y:%3d, i:%3d]=%.5f     ", offsetX, offsetY, byteOffset, (double)gt);
+            }
+
+            // set limits, bytes can hold values from 0 up to 255 (or max T)
+            if (gt > maxResult) {
+                maxResult = gt;
+            }
+
+            // set new data in the other byte array for your image data
+            imagePtr[byteOffset] = gt;
+        }
+        // printf("\n");
+    }
+
+    // Normalize resultBuffer
+    printf("Max value is %.5f\n", (double)maxResult);
+}
+
 template <typename T>
 void FITSData::sobel(QVector<T> &gradient, QVector<int> &direction)
 {
@@ -3792,7 +3913,6 @@ void FITSData::sobel(QVector<T> &gradient, QVector<int> &direction)
     {
         size_t yOffset    = y * stats.width;
         const T * grayLine = reinterpret_cast<T *>(m_ImageBuffer) + yOffset;
-
         const T * grayLine_m1 = y < 1 ? grayLine : grayLine - stats.width;
         const T * grayLine_p1 = y >= stats.height - 1 ? grayLine : grayLine + stats.width;
 
@@ -3814,29 +3934,12 @@ void FITSData::sobel(QVector<T> &gradient, QVector<int> &direction)
 
             /* Gradient directions are classified in 4 possible cases
              *
-             * dir 0
+             * dir 0    dir 1   dir 2   dir 3
              *
-             * x x x
-             * - - -
-             * x x x
+             * x x x    x x /   \ x x   x | x
+             * - - -    x / x   x \ x   x | x
+             * x x x    / x x   x x \   x | x
              *
-             * dir 1
-             *
-             * x x /
-             * x / x
-             * / x x
-             *
-             * dir 2
-             *
-             * \ x x
-             * x \ x
-             * x x \
-             *
-             * dir 3
-             *
-             * x | x
-             * x | x
-             * x | x
              */
             if (gradX == 0 && gradY == 0)
                 directionLine[x] = 0;

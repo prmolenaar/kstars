@@ -503,6 +503,13 @@ class FITSData : public QObject
         template <typename T>
         QPair<double, double> getSquaredSumAndMean(uint32_t start, uint32_t stride);
 
+        // Gaussian blur
+        QVector<double> createGaussianKernel(int size, double sigma);
+        template <typename T>
+        void gaussianBlur(int kernelSize, double sigma);
+        template <typename T>
+        void ConvolutionFilter(const QVector<double> &kernel, int kernelSize);
+
         // Sobel detector by Gonzalo Exequiel Pedone
         template <typename T>
         void sobel(QVector<T> &gradient, QVector<int> &direction);

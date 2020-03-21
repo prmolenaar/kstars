@@ -620,7 +620,7 @@ void Focus::start()
 
     //    Options::setFocusTicks(stepIN->value());
     //    Options::setFocusTolerance(toleranceIN->value());
-    //    //Options::setFocusExposure(exposureIN->value());
+    //    Options::setFocusExposure(exposureIN->value());
     //    Options::setFocusMaxTravel(maxTravelIN->value());
     //    Options::setFocusBoxSize(focusBoxSize->value());
     //    Options::setFocusSubFrame(useSubFrame->isChecked());
@@ -629,15 +629,19 @@ void Focus::start()
     //    Options::setUseFocusDarkFrame(darkFrameCheck->isChecked());
     //    Options::setFocusFramesCount(focusFramesSpin->value());
     //    Options::setFocusUseFullField(useFullField->isChecked());
-    //    Options::setStoreIntermediateResult(storeIntermediateResultCheck->isChecked());
+    //    Options::setStoreIntermediateResult(bahtinovStoreIntermediateResultCheck->isChecked());
+    //    Options::setGaussianBlurCheck(bahtinovGaussianBlurCheck->isChecked());
 
     qCDebug(KSTARS_EKOS_FOCUS)  << "Starting focus with box size: " << focusBoxSize->value()
                                 << " Subframe: " << ( useSubFrame->isChecked() ? "yes" : "no" )
                                 << " Autostar: " << ( useAutoStar->isChecked() ? "yes" : "no" )
                                 << " Full frame: " << ( useFullField->isChecked() ? "yes" : "no " )
-                                << " Store intermediate result: " << ( storeIntermediateResultCheck->isChecked() ? "yes" : "no" )
+                                << " Store intermediate result: " << ( bahtinovStoreIntermediateResultCheck->isChecked() ? "yes" : "no" )
+                                << " Gaussian Blur Check: " << ( bahtinovGaussianBlurCheck->isChecked() ? "yes" : "no" )
                                 << " [" << fullFieldInnerRing->value() << "%," << fullFieldOuterRing->value() << "%]"
                                 << " Step Size: " << stepIN->value() << " Threshold: " << thresholdSpin->value()
+                                << " Bahtinov Gaussian Sigma: " << bahtinovGaussianSigmaSpin->value()
+                                << " Bahtinov Gaussian Kernel size: " << bahtinovKernelSizeSpin->value()
                                 << " Bahtinov Low Threshold: " << bahtinovLowThresholdSpin->value()
                                 << " Bahtinov High Threshold: " << bahtinovHighThresholdSpin->value()
                                 << " Bahtinov Threshold: " << bahtinovThresholdSpin->value()
@@ -3139,6 +3143,8 @@ void Focus::syncSettings()
             Options::setFocusTolerance(dsb->value());
         else if (dsb == thresholdSpin)
             Options::setFocusThreshold(dsb->value());
+        else if (dsb == bahtinovGaussianSigmaSpin)
+            Options::setFocusBahtinovSigma(dsb->value());
     }
     else if ( (sb = qobject_cast<QSpinBox*>(sender())))
     {
@@ -3159,6 +3165,8 @@ void Focus::syncSettings()
             Options::setFocusBahtinovHighThreshold(sb->value());
         else if (sb == bahtinovThresholdSpin)
             Options::setFocusBahtinovThreshold(sb->value());
+        else if (sb == bahtinovKernelSizeSpin)
+            Options::setFocusBahtinovKernelSize(sb->value());
     }
     else if ( (cb = qobject_cast<QCheckBox*>(sender())))
     {
@@ -3175,8 +3183,10 @@ void Focus::syncSettings()
             Options::setFocusUseFullField(cb->isChecked());
         else if (cb == suspendGuideCheck)
             Options::setSuspendGuiding(cb->isChecked());
-        else if (cb == storeIntermediateResultCheck)
-            Options::setStoreIntermediateResult(cb->isChecked());
+        else if (cb == bahtinovStoreIntermediateResultCheck)
+            Options::setFocusBahtinovStoreIntermediateResult(cb->isChecked());
+        else if (cb == bahtinovGaussianBlurCheck)
+            Options::setFocusBahtinovGaussianBlur(cb->isChecked());
     }
     else if ( (cbox = qobject_cast<QComboBox*>(sender())))
     {
@@ -3241,7 +3251,7 @@ void Focus::loadSettings()
     // Guide Setting time
     GuideSettleTime->setValue(Options::guideSettleTime());
     // Store intermediate bahtinov mask processed images to disk?
-    storeIntermediateResultCheck->setChecked(Options::storeIntermediateResult());
+    bahtinovStoreIntermediateResultCheck->setChecked(Options::focusBahtinovStoreIntermediateResult());
 
     // Max Travel
     if (Options::focusMaxTravel() > maxTravelIN->maximum())
@@ -3263,15 +3273,29 @@ void Focus::loadSettings()
     // Threshold spin
     thresholdSpin->setValue(Options::focusThreshold());
     thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
-    // Bahtinov Threshold spin
+
+    // Bahtinov controls
+    bahtinovGaussianSigmaSpin->setValue(Options::focusBahtinovSigma());
+    bahtinovGaussianSigmaSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
+    bahtinovKernelSizeSpin->setValue(Options::focusBahtinovKernelSize());
+    bahtinovKernelSizeSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
     bahtinovLowThresholdSpin->setValue(Options::focusBahtinovLowThreshold());
-    bahtinovHighThresholdSpin->setValue(Options::focusBahtinovHighThreshold());
-    bahtinovThresholdSpin->setValue(Options::focusBahtinovThreshold());
-    storeIntermediateResultCheck->setChecked(Options::storeIntermediateResult());
     bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
+    bahtinovHighThresholdSpin->setValue(Options::focusBahtinovHighThreshold());
     bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
+    bahtinovThresholdSpin->setValue(Options::focusBahtinovThreshold());
     bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
-    storeIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
+    bahtinovStoreIntermediateResultCheck->setChecked(Options::focusBahtinovStoreIntermediateResult());
+    bahtinovStoreIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
+    bahtinovGaussianBlurCheck->setChecked(Options::focusBahtinovGaussianBlur());
+    bahtinovGaussianBlurCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
+
     focusDetectionCombo->setCurrentIndex(focusDetection);
     if (focusDetection == ALGORITHM_HOUGH)
     {
@@ -3321,7 +3345,8 @@ void Focus::initSettingsConnections()
     connect(fullFieldOuterRing, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(suspendGuideCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
     connect(GuideSettleTime, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
-    connect(storeIntermediateResultCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
+    connect(bahtinovStoreIntermediateResultCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
+    connect(bahtinovGaussianBlurCheck, &QCheckBox::toggled, this, &Ekos::Focus::syncSettings);
 
     connect(focusBoxSize, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
     connect(maxTravelIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
@@ -3329,9 +3354,11 @@ void Focus::initSettingsConnections()
     connect(maxSingleStepIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(toleranceIN, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(thresholdSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
+    connect(bahtinovGaussianSigmaSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(bahtinovLowThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
     connect(bahtinovHighThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
     connect(bahtinovThresholdSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
+    connect(bahtinovKernelSizeSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
 
     connect(focusAlgorithmCombo, static_cast<void(QComboBox::*)(const QString &)>(&QComboBox::activated), this, &Ekos::Focus::syncSettings);
     connect(focusFramesSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
@@ -3550,10 +3577,13 @@ void Focus::initConnections()
     {
         focusDetection = static_cast<StarAlgorithm>(index);
         thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
+        bahtinovKernelSizeSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        bahtinovGaussianSigmaSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovLowThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovHighThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         bahtinovThresholdSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
-        storeIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        bahtinovStoreIntermediateResultCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        bahtinovGaussianBlurCheck->setEnabled(focusDetection == ALGORITHM_HOUGH);
         if (focusDetection == ALGORITHM_HOUGH)
         {
             // In case of Bahtinov mask uncheck auto select star

@@ -1823,6 +1823,14 @@
          <label>Relative percentage strength of centroid edge pixel strength to average pixel value.</label>
          <default>150</default>
       </entry>
+      <entry name="FocusBahtinovSigma" type="Double">
+         <label>Bahtinov gaussian blur sigma value.</label>
+         <default>2.0</default>
+      </entry>
+      <entry name="FocusBahtinovKernelSize" type="Int">
+         <label>Bahtinov gaussian blur kernel size.</label>
+         <default>5</default>
+      </entry>
       <entry name="FocusBahtinovLowThreshold" type="Int">
          <label>Bahtinov low threshold value. The threshold for detecting the lines in the star image.</label>
          <default>50</default>
@@ -1835,9 +1843,13 @@
          <label>Bahtinov threshold value. The threshold for detecting the lines in the star image.</label>
          <default>150</default>
       </entry>
-      <entry name="StoreIntermediateResult" type="Bool">
+      <entry name="FocusBahtinovStoreIntermediateResult" type="Bool">
          <label>Store the intermediate bahtinov mask image processing results to disk.</label>
          <default>false</default>
+      </entry>
+      <entry name="FocusBahtinovGaussianBlur" type="Bool">
+         <label>Perform a gaussian blur before detecting the lines in the star image.</label>
+         <default>true</default>
       </entry>
       <entry name="FocusDetection" type="UInt">
          <label>Star detection algorithm</label>

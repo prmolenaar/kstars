@@ -35,6 +35,7 @@ typedef enum {
     FITS_LINEAR,
     FITS_LOG,
     FITS_SQRT,
+    FITS_GAUSSIAN,
     FITS_CUSTOM
 } FITSScale;
 
