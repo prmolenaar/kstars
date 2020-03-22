@@ -27,6 +27,7 @@ typedef enum {
     FITS_EQUALIZE,
     FITS_HIGH_PASS,
     FITS_MEDIAN,
+    FITS_GAUSSIAN,
     FITS_ROTATE_CW,
     FITS_ROTATE_CCW,
     FITS_FLIP_H,
@@ -35,7 +36,6 @@ typedef enum {
     FITS_LINEAR,
     FITS_LOG,
     FITS_SQRT,
-    FITS_GAUSSIAN,
     FITS_CUSTOM
 } FITSScale;
 

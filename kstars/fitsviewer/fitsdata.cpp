@@ -357,7 +357,7 @@ bool FITSData::privateLoad(void *fits_buffer, size_t fits_buffer_size, bool sile
 }
 
 template <typename T>
-void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
+void FITSData::savePNG(const QString &filename, double dataMax, T * data /* = nullptr */)
 {
     QImage image;
     T * buffer = data;
@@ -365,12 +365,16 @@ void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
         buffer = (T *)getImageBuffer();
     }
     const T limit   = std::numeric_limits<T>::max();
-    T bMin    = 0;
-    T bMax    = limit;
-    uint16_t w    = width();
-    uint16_t h    = height();
+    T bMin = 0;
+    T bMax = limit;
+    uint16_t w = width();
+    uint16_t h = height();
     uint32_t size = w * h;
+    double bScale = 255. / (dataMax - bMin);
     double val;
+
+    qCInfo(KSTARS_FITS) << "Channels: " << channels() << ", dataMax: " << dataMax << ", bScale: " << bScale
+                        << ", Limit: " << bMax << ", filename: '" << filename << "'\n";
 
     if (channels() == 1)
     {
@@ -383,6 +387,7 @@ void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
             for (int i = 0; i < w; i++)
             {
                 val         = qBound(bMin, buffer[j * w + i], bMax);
+                val         = val * bScale;
                 scanLine[i] = qBound<unsigned char>(0, (unsigned char)val, 255);
             }
         }
@@ -401,7 +406,7 @@ void FITSData::savePNG(const QString &filename, T * data /* = nullptr */)
                 rval = qBound(bMin, buffer[j * w + i], bMax);
                 gval = qBound(bMin, buffer[j * w + i + size], bMax);
                 bval = qBound(bMin, buffer[j * w + i + size * 2], bMax);
-                value = qRgb(rval, gval, bval);
+                value = qRgb(rval * bScale, gval * bScale, bval * bScale);
                 scanLine[i] = value;
             }
         }
@@ -1109,13 +1114,24 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     // #4 Set image buffer
     boundedImage->setImageBuffer(buffer);
 
+    boundedImage->calculateStats(true);
+
     // Save boundedImage to file for debug purposes
     QDir dir;
     QDateTime now = KStarsData::Instance()->lt();
     QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
     dir.mkpath(path);
     QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
-    QString filename;
+
+    // Save original image
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        for (int i = 0; i < boundedImage->channels(); i++) {
+            qCInfo(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
+                << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
+                << ", stddev: " << boundedImage->stats.stddev[i] << "\n";
+        }
+        boundedImage->savePNG<T>(name + "_0_original.png", boundedImage->stats.max[0]);
+    }
 
     // #6 Perform Hough transform after image passed through Canny edge detection
     QVector<T> gradients;
@@ -1124,34 +1140,37 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     QVector<T> thresholded;
     QVector<T> traced;
 
-    // Save original image
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_original_0.png");
-    }
-
     // Apply gaussian blur
     if (Options::focusBahtinovGaussianBlur()) {
         boundedImage->applyFilter(FITS_GAUSSIAN);
+        boundedImage->calculateStats(true);
         if (Options::focusBahtinovStoreIntermediateResult()) {
-            boundedImage->savePNG<T>(name + "_gaussian_1.png");
+            boundedImage->savePNG<T>(name + "_1_gaussian.png", boundedImage->stats.max[0]);
         }
     }
 
     // Sobel, Non-Maximum Suppression, Thresholding and Canny
     boundedImage->sobel<T>(gradients, directions);
+    if (Options::focusBahtinovStoreIntermediateResult()) {
+        T max = *std::max_element(gradients.begin(), gradients.end());
+        boundedImage->savePNG<T>(name + "_2_gradients.png", (double)max, gradients.data());
+    }
     boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
     if (Options::focusBahtinovStoreIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_thinned_2.png", thinned.data());
+        T max = *std::max_element(thinned.begin(), thinned.end());
+        boundedImage->savePNG<T>(name + "_3_thinned.png", (double)max, thinned.data());
     }
     boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(),
                                (T)Options::focusBahtinovHighThreshold(),
                                thinned, thresholded);
     if (Options::focusBahtinovStoreIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_thresholded_3.png", thresholded.data());
+        T max = *std::max_element(thresholded.begin(), thresholded.end());
+        boundedImage->savePNG<T>(name + "_4_thresholded.png", (double)max, thresholded.data());
     }
     traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
     if (Options::focusBahtinovStoreIntermediateResult()) {
-        boundedImage->savePNG<T>(name + "_hysteresis_4.png", traced.data());
+        T max = *std::max_element(traced.begin(), traced.end());
+        boundedImage->savePNG<T>(name + "_5_hysteresis.png", (double)max, traced.data());
     }
     // Not needed anymore
     delete boundedImage;
@@ -2543,6 +2562,10 @@ void FITSData::applyFilter(FITSScale type, uint8_t * targetImage, QVector<double
         }
         break;
 
+        case FITS_GAUSSIAN:
+            gaussianBlur<T>(Options::focusBahtinovKernelSize(), Options::focusBahtinovSigma());
+            break;
+
         case FITS_ROTATE_CW:
             rotFITS<T>(90, 0);
             rotCounter++;
@@ -2561,10 +2584,6 @@ void FITSData::applyFilter(FITSScale type, uint8_t * targetImage, QVector<double
         case FITS_FLIP_V:
             rotFITS<T>(0, 2);
             flipVCounter++;
-            break;
-
-        case FITS_GAUSSIAN:
-            gaussianBlur<T>(Options::focusBahtinovKernelSize(), Options::focusBahtinovSigma());
             break;
 
         default:
@@ -3924,13 +3943,22 @@ void FITSData::sobel(QVector<T> &gradient, QVector<int> &direction)
             int x_m1 = x < 1 ? x : x - 1;
             int x_p1 = x >= stats.width - 1 ? x : x + 1;
 
-            T gradX = grayLine_m1[x_p1] + 2 * grayLine[x_p1] + grayLine_p1[x_p1] - grayLine_m1[x_m1] -
-                        2 * grayLine[x_m1] - grayLine_p1[x_m1];
+            T gradX = grayLine_m1[x_p1]
+                    + 2 * grayLine[x_p1]
+                    + grayLine_p1[x_p1]
+                    - grayLine_m1[x_m1]
+                    - 2 * grayLine[x_m1]
+                    - grayLine_p1[x_m1];
 
-            T gradY = grayLine_m1[x_m1] + 2 * grayLine_m1[x] + grayLine_m1[x_p1] - grayLine_p1[x_m1] -
-                        2 * grayLine_p1[x] - grayLine_p1[x_p1];
+            T gradY = grayLine_m1[x_m1]
+                    + 2 * grayLine_m1[x]
+                    + grayLine_m1[x_p1]
+                    - grayLine_p1[x_m1]
+                    - 2 * grayLine_p1[x]
+                    - grayLine_p1[x_p1];
 
-            gradientLine[x] = qAbs(gradX) + qAbs(gradY);
+            // gradientLine[x] = qAbs(gradX) + qAbs(gradY);
+            gradientLine[x] = qSqrt((gradX * gradX) + (gradY * gradY));
 
             /* Gradient directions are classified in 4 possible cases
              *
