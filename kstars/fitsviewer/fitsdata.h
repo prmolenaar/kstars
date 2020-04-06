@@ -81,6 +81,20 @@ class BahtinovEdge : public Edge
         QPointF offset;
 };
 
+class BahtinovLineAverage
+{
+    public:
+        BahtinovLineAverage()
+        {
+            average = 0.0;
+            offset = 0;
+        }
+        virtual ~BahtinovLineAverage() = default;
+
+        double average;
+        size_t offset;
+};
+
 class FITSSkyObject : public QObject
 {
         Q_OBJECT
@@ -477,6 +491,9 @@ class FITSData : public QObject
         bool debayer();
 
         template <typename T>
+        bool rotFITS(int angle, T& maxValue, T * rotimage);
+
+        template <typename T>
         bool rotFITS(int rotate, int mirror);
 
         // Apply Filter
@@ -522,16 +539,6 @@ class FITSData : public QObject
         int partition(int width, int height, QVector<T> &gradient, QVector<int> &ids);
         template <typename T>
         void trace(int width, int height, int id, QVector<T> &image, QVector<int> &ids, int x, int y);
-
-        // Canny Edge detection methods as preparation for Hough Transform
-        template <typename T>
-        void thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction, QVector<T> &thinned);
-        template <typename T>
-        void threshold(T thLow, T thHi, const QVector<T> &image, QVector<T> &thresholded);
-        template <typename T>
-        QVector<T> hysteresis(int width, int height, const QVector<T> &image);
-        template <typename T>
-        void traceLines(int width, int height, QVector<T> &image, int x, int y);
 
 #ifndef KSTARS_LITE
         FITSHistogram *histogram { nullptr }; // Pointer to the FITS data histogram

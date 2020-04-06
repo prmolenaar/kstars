@@ -238,7 +238,6 @@ if (CFITSIO_FOUND)
         )
 
     set (hough_SRCS
-        fitsviewer/hough/houghtransform.cpp
         fitsviewer/hough/houghline.cpp
         )
 
@@ -283,7 +282,6 @@ IF (CFITSIO_FOUND)
             SET_SOURCE_FILES_PROPERTIES(fitsviewer/fitsdata.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=address,undefined -fomit-frame-pointer")
             SET_SOURCE_FILES_PROPERTIES(fitsviewer/fitshistogram.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=address,undefined -fomit-frame-pointer")
             SET_SOURCE_FILES_PROPERTIES(fitsviewer/fitsview.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=address,undefined -fomit-frame-pointer")
-            SET_SOURCE_FILES_PROPERTIES(fitsviewer/hough/houghtransform.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=address,undefined -fomit-frame-pointer")
             SET_SOURCE_FILES_PROPERTIES(fitsviewer/hough/houghline.cpp PROPERTIES COMPILE_FLAGS "-fno-sanitize=address,undefined -fomit-frame-pointer")
         ELSE ()
             SET_SOURCE_FILES_PROPERTIES(fitsviewer/bayer.c PROPERTIES COMPILE_FLAGS "-Wno-cast-align")

@@ -10,6 +10,8 @@
 #include "houghline.h"
 
 #include <qmath.h>
+#include <QVector>
+#include <fits_debug.h>
 
 /**
  * Initialises the hough line
@@ -21,34 +23,33 @@ HoughLine::HoughLine(double theta, double r, int width, int height, int score)
     this->r = r;
     this->score = score;
 
-    // During processing h_h is doubled so that -ve r values
-    int houghHeight = (int) (qSqrt(2) * qMax(height, width)) / 2;
+    setP1(RotatePoint(0, r, theta, width, height));
+    setP2(RotatePoint(width - 1, r, theta, width, height));
+}
 
-    // Find edge points and vote in array
-    float centerX = width / 2;
-    float centerY = height / 2;
+QPointF HoughLine::RotatePoint(int x1, double r, double theta, int width, int height)
+{
+    int hx, hy;
 
-    // Draw edges in output array
-    double sinTheta = qSin(theta);
-    double cosTheta = qCos(theta);
+    hx = qFloor((width + 1) / 2.0);
+    hy = qFloor((height + 1) / 2.0);
 
-    double x1=0.0;
-    double y1=0.0;
-    double x2=0.0;
-    double y2=0.0;
-    if (theta < M_PI * 0.25 || theta > M_PI * 0.75) {
-        // Store coordinates of vertical-ish lines
-        y2 = height - 1.0;
-        x1 = ((((r - houghHeight) - ((y1 - centerY) * sinTheta)) / cosTheta) + centerX);
-        x2 = ((((r - houghHeight) - ((y2 - centerY) * sinTheta)) / cosTheta) + centerX);
-    } else {
-        // Store coordinates of horizontal-ish lines
-        x2 = width - 1.0;
-        y1 = ((((r - houghHeight) - ((x1 - centerX) * cosTheta)) / sinTheta) + centerY);
-        y2 = ((((r - houghHeight) - ((x2 - centerX) * cosTheta)) / sinTheta) + centerY);
-    }
-    setP1(QPointF(x1, y1));
-    setP2(QPointF(x2, y2));
+    double sinAngle = qSin(-theta);
+    double cosAngle = qCos(-theta);
+
+    // translate point back to origin:
+    double x2 = x1 - hx;
+    double y2 = r - hy;
+
+    // rotate point
+    double xnew = x2 * cosAngle - y2 * sinAngle;
+    double ynew = x2 * sinAngle + y2 * cosAngle;
+
+    // translate point back:
+    x2 = xnew + hx;
+    y2 = ynew + hy;
+
+    return QPointF(x2, y2);
 }
 
 int HoughLine::getScore() const
@@ -79,6 +80,13 @@ bool HoughLine::compareByScore(const HoughLine *line1,const HoughLine *line2)
 bool HoughLine::compareByTheta(const HoughLine *line1,const HoughLine *line2)
 {
     return (line1->getTheta() < line2->getTheta());
+}
+
+void HoughLine::printHoughLine()
+{
+    qCDebug(KSTARS_FITS) << "Houghline: [score: " << score << ", r: " << r << ", theta: " << theta << " [rad]="
+                         << (theta * 180.0 / M_PI) << " [deg], p1: " << p1().x() << ", " << p1().y() << ", p2: "
+                         << p2().x() << ", " << p2().y() << "]\r\n";
 }
 
 /**
@@ -150,4 +158,46 @@ void HoughLine::Offset(const int offsetX, const int offsetY)
 {
     setP1(QPointF(p1().x() + offsetX, p1().y() + offsetY));
     setP2(QPointF(p2().x() + offsetX, p2().y() + offsetY));
+}
+
+void HoughLine::getSortedTopThreeLines(QVector<HoughLine*> &houghLines, QVector<HoughLine*> &top3Lines)
+{
+    // Sort houghLines by score (highest scores are clearest lines)
+    // For use of sort compare methods see: https://www.off-soft.net/en/develop/qt/qtb1.html
+    qSort(houghLines.begin(), houghLines.end(), HoughLine::compareByScore);
+
+    // Get top three lines (these should represent the three lines matching the bahtinov mask lines
+    top3Lines = houghLines.mid(0, 3);
+    // Verify the angle of these lines with regard to the bahtinov mask angle, correct the angle if necessary
+    HoughLine* lineR = top3Lines[0];
+    HoughLine* lineG = top3Lines[1];
+    HoughLine* lineB = top3Lines[2];
+    double thetaR = lineR->getTheta();
+    double thetaG = lineG->getTheta();
+    double thetaB = lineB->getTheta();
+    // Calculate angle between each line
+    double bahtinovMaskAngle = qDegreesToRadians(20.0 + 5.0); // bahtinov mask angle plus 5 degree margin
+    double dGR = thetaR - thetaG;
+    double dBG = thetaB - thetaG;
+    double dBR = thetaB - thetaR;
+    if (dGR > bahtinovMaskAngle && dBR > bahtinovMaskAngle) {
+        // lineR has theta that is 180 degrees rotated
+        thetaR -= M_PI;
+        // update theta
+        lineR->setTheta(thetaR);
+    }
+    if (dBR > bahtinovMaskAngle && dBG > bahtinovMaskAngle) {
+        // lineB has theta that is 180 degrees rotated
+        thetaB -= M_PI;
+        // update theta
+        lineB->setTheta(thetaB);
+    }
+    if (dGR > bahtinovMaskAngle && dBG > bahtinovMaskAngle) {
+        // lineG has theta that is 180 degrees rotated
+        thetaG -= M_PI;
+        // update theta
+        lineG->setTheta(thetaG);
+    }
+    // Now sort top3lines array according to calculated new angles
+    qSort(top3Lines.begin(),top3Lines.end(), HoughLine::compareByTheta);
 }

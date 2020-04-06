@@ -13,6 +13,7 @@
 #include <QLineF>
 #include <QPointF>
 #include <stdio.h>
+#include <qmath.h>
 
 /**
  * @class HoughLine
@@ -33,18 +34,13 @@ class HoughLine : public QLineF
 
     HoughLine(double theta, double r, int width, int height, int score);
     virtual ~HoughLine() = default;
+    QPointF RotatePoint(int x1, double r, double theta, int width, int height);
     IntersectResult Intersect(const HoughLine& other_line, QPointF& intersection);
     bool DistancePointLine(const QPointF& point, QPointF& intersection, double& distance);
     int getScore() const;
     double getR() const;
     double getTheta() const;
     void setTheta(const double theta);
-
-	// TODO PRM: Check if these methods are necessary!
-    HoughLine(const HoughLine &other) : QLineF(other.p1(), other.p2())
-    {
-        *this = other;
-    }
 
     HoughLine& operator=(const HoughLine &other)
     {
@@ -63,13 +59,9 @@ class HoughLine : public QLineF
 
     static bool compareByScore(const HoughLine *line1,const HoughLine *line2);
     static bool compareByTheta(const HoughLine *line1,const HoughLine *line2);
+    static void getSortedTopThreeLines(QVector<HoughLine*> &houghLines, QVector<HoughLine*> &top3Lines);
 
-    void printHoughLine()
-    {
-        printf("Houghline: [s:%d, r:%.2f, theta:%.2f, p1:%.2f,%.2f, p1:%.2f,%.2f]\r\n",
-               score, r, theta, p1().x(), p1().y(), p2().x(), p2().y());
-    }
-
+    void printHoughLine();
     void Offset(const int offsetX, const int offsetY);
 
   private:

@@ -22,9 +22,7 @@
 #include "sep/sep.h"
 #include "fpack.h"
 
-#include "hough/houghtransform.h"
-// Supply template class source file to please linker
-#include "hough/houghtransform.cpp"
+#include "hough/houghline.h"
 
 #include "kstarsdata.h"
 #include "ksutils.h"
@@ -185,8 +183,10 @@ bool FITSData::privateLoad(void *fits_buffer, size_t fits_buffer_size, bool sile
     long naxes[3];
     QString errMessage;
 
-    m_isTemporary = m_Filename.startsWith(m_TemporaryPath);
+    // TODO PRM: m_Filename = "<path_to_input_file>/<input_file_with_bahtinov_pattern>.fits"; // For debugging only
+    m_Filename.startsWith(m_TemporaryPath);
 
+    // TODO PRM: fits_buffer = nullptr; // force use of input file. For debugging only
     if (fits_buffer == nullptr && m_Filename.endsWith(".fz"))
     {
         // Store so we don't lose.
@@ -374,7 +374,7 @@ void FITSData::savePNG(const QString &filename, double dataMax, T * data /* = nu
     double val;
 
     qCInfo(KSTARS_FITS) << "Channels: " << channels() << ", dataMax: " << dataMax << ", bScale: " << bScale
-                        << ", Limit: " << bMax << ", filename: '" << filename << "'\n";
+                        << ", Limit: " << bMax << ", filename: '" << filename << "'\r\n";
 
     if (channels() == 1)
     {
@@ -1117,94 +1117,132 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     boundedImage->calculateStats(true);
 
     // Save boundedImage to file for debug purposes
-    QDir dir;
-    QDateTime now = KStarsData::Instance()->lt();
-    QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
-    dir.mkpath(path);
-    QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
+//    QDir dir;
+//    QDateTime now = KStarsData::Instance()->lt();
+//    QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
+//    dir.mkpath(path);
+//    QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
+//    for (int i = 0; i < boundedImage->channels(); i++) {
+//        qCInfo(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
+//            << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
+//            << ", stddev: " << boundedImage->stats.stddev[i] << "\r\n";
+//    }
+//    boundedImage->savePNG<T>(name + "_0_original.png", boundedImage->stats.max[0]);
 
-    // Save original image
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        for (int i = 0; i < boundedImage->channels(); i++) {
-            qCInfo(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
-                << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
-                << ", stddev: " << boundedImage->stats.stddev[i] << "\n";
+    // Rotate image 180 degrees in steps of 1 degree
+    // TODO PRM: Move to Future to speed up process
+    auto * rotimage = new T[size * BBP];
+    QMap<int, BahtinovLineAverage*> lineAveragesPerAngle;
+    int steps = 180;
+    double radPerStep = dms::PI / (double)steps;
+    int width = boundedImage->stats.width;
+    int height = boundedImage->stats.height;
+    int numChannels = boundedImage->channels();
+    int numSamplesPerChannel = boundedImage->stats.samples_per_channel;
+
+    for (int angle = 0; angle < steps; angle++)
+    {
+        // Rotate image one step
+        T maxValue = 0;
+        boundedImage->rotFITS<T>(angle, maxValue, rotimage);
+
+        // Calculate average pixel value for each row
+        auto * rotBuffer = reinterpret_cast<T *>(rotimage);
+
+        BahtinovLineAverage* pLineAverage = new BahtinovLineAverage();
+
+        for (int y1 = 0; y1 < height; y1++)
+        {
+            unsigned long rowSum = 0;
+            for (int x1 = 0; x1 < width; x1++)
+            {
+                int index = y1 * width + x1;
+                unsigned long channelAverage = 0;
+                for (int i = 0; i < numChannels; i++)
+                {
+                    offset = numSamplesPerChannel * i;
+                    channelAverage += rotBuffer[index + offset];
+                }
+                rowSum += channelAverage / numChannels;
+            }
+            double average = rowSum / (double)width;
+            if (pLineAverage != nullptr && average > pLineAverage->average)
+            {
+                pLineAverage->average = average;
+                pLineAverage->offset = y1;
+            }
         }
-        boundedImage->savePNG<T>(name + "_0_original.png", boundedImage->stats.max[0]);
+
+        // Store line average in map
+        lineAveragesPerAngle.insert(angle, pLineAverage);
     }
 
-    // #6 Perform Hough transform after image passed through Canny edge detection
-    QVector<T> gradients;
-    QVector<int> directions;
-    QVector<T> thinned;
-    QVector<T> thresholded;
-    QVector<T> traced;
-
-    // Apply gaussian blur
-    if (Options::focusBahtinovGaussianBlur()) {
-        boundedImage->applyFilter(FITS_GAUSSIAN);
-        boundedImage->calculateStats(true);
-        if (Options::focusBahtinovStoreIntermediateResult()) {
-            boundedImage->savePNG<T>(name + "_1_gaussian.png", boundedImage->stats.max[0]);
-        }
-    }
-
-    // Sobel, Non-Maximum Suppression, Thresholding and Canny
-    boundedImage->sobel<T>(gradients, directions);
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        T max = *std::max_element(gradients.begin(), gradients.end());
-        boundedImage->savePNG<T>(name + "_2_gradients.png", (double)max, gradients.data());
-    }
-    boundedImage->thinning<T>(subW, subH, gradients, directions, thinned);
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        T max = *std::max_element(thinned.begin(), thinned.end());
-        boundedImage->savePNG<T>(name + "_3_thinned.png", (double)max, thinned.data());
-    }
-    boundedImage->threshold<T>((T)Options::focusBahtinovLowThreshold(),
-                               (T)Options::focusBahtinovHighThreshold(),
-                               thinned, thresholded);
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        T max = *std::max_element(thresholded.begin(), thresholded.end());
-        boundedImage->savePNG<T>(name + "_4_thresholded.png", (double)max, thresholded.data());
-    }
-    traced = boundedImage->hysteresis<T>(subW, subH, thresholded);
-    if (Options::focusBahtinovStoreIntermediateResult()) {
-        T max = *std::max_element(traced.begin(), traced.end());
-        boundedImage->savePNG<T>(name + "_5_hysteresis.png", (double)max, traced.data());
-    }
     // Not needed anymore
     delete boundedImage;
 
-    // Hough Transform
-    QVector<T> houghArray;
-    HoughTransform htf(subW, subH, houghArray);
-    htf.addPoints(traced, houghArray);
+    // Calculate Bahtinov angles
+    QVector<HoughLine*> bahtinov_angles;
 
-    QVector<HoughLine*> houghLines;
-    htf.getLines(Options::focusBahtinovThreshold(), houghArray, houghLines);
+    // For all three Bahtinov angles
+    for (int index1 = 0; index1 < 3; index1++)
+    {
+        double maxAverage = 0.0;
+        double maxAngle = 0.0;
+        int maxAverageOffset = 0;
+        for (int angle = 0; angle < steps; angle++)
+        {
+            BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[angle];
+            if (pLineAverage != nullptr)
+            {
+                if (pLineAverage->average > maxAverage)
+                {
+                    maxAverage = pLineAverage->average;
+                    maxAverageOffset = pLineAverage->offset;
+                    maxAngle = angle;
+                }
+            }
+        }
+        HoughLine* pHoughLine = new HoughLine(maxAngle * radPerStep, maxAverageOffset, width, height, (int)maxAverage);
+        if (pHoughLine != nullptr)
+        {
+            bahtinov_angles.append(pHoughLine);
+        }
 
-    // Calculate focus offset (store value in HFR)
-    qCInfo(KSTARS_FITS) << "Number of lines found: " << houghLines.size();
+        // Remove data around peak to prevent it from being detected again
+        int minBahtinovAngleOffset = 10;
+        for (int subAngle = maxAngle - minBahtinovAngleOffset; subAngle < maxAngle + minBahtinovAngleOffset; subAngle++)
+        {
+            int angleInRange = subAngle;
+            if (angleInRange < 0)
+            {
+                angleInRange += 180;
+            }
+            if (angleInRange >= 180)
+            {
+                angleInRange -= 180;
+            }
+            BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[angleInRange];
+            if (pLineAverage != nullptr)
+            {
+                delete pLineAverage;
+                lineAveragesPerAngle.remove(angleInRange);
+            }
+        }
+    }
 
     // Proceed with focus offset calculation, but only when at least 3 lines have been detected
     QVector<HoughLine*> top3Lines;
-    if (houghLines.size() >= 3)
+    if (bahtinov_angles.size() >= 3)
     {
-        htf.getSortedTopThreeLines(houghLines, top3Lines);
+        HoughLine::getSortedTopThreeLines(bahtinov_angles, top3Lines);
 
-        /* Print debug information
-        printf("houghLines:\r\n");
-        foreach (HoughLine* ln, houghLines)
-        {
-            ln->printHoughLine();
-        }
-        printf("top3Lines:\r\n");
+        // Debug output
+        qCDebug(KSTARS_FITS) << "Sorted bahtinov angles:\r\n";
         foreach (HoughLine* ln, top3Lines)
         {
             ln->printHoughLine();
         }
         fflush(stdout);
-        */
 
         // Determine intersection between outer lines
         HoughLine* oneLine = top3Lines[0];
@@ -1213,18 +1251,22 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         HoughLine::IntersectResult result = oneLine->Intersect(*otherLine, intersection);
         if (result == HoughLine::INTERESECTING) {
 
+            qCDebug(KSTARS_FITS) << "Intersection: " << intersection.x() << ", " << intersection.y() << "\r\n";
+
             // Determine offset between intersection and middle line
             HoughLine* midLine = top3Lines[1];
             QPointF intersectionOnMidLine;
             double distance;
             if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
-                // printf("Returned Offset is %.2f\r\n", distance);
+                qCDebug(KSTARS_FITS) << "Distance between intersection and midline is " << distance
+                                    << " at mid line point " << intersectionOnMidLine.x() << ", "
+                                    << intersectionOnMidLine.y() << "\r\n";
 
                 // Add star center to selected stars
                 // Maximum Radius
                 int maxR = qMin(subW - 1, subH - 1) / 2;
                 BahtinovEdge* center  = new BahtinovEdge();
-                center->width = maxR / 2; // TODO PRM: Adjust to distance?
+                center->width = maxR / 3;
                 center->x     = subX + intersection.x();
                 center->y     = subY + intersection.y();
                 // Set distance value in HFR
@@ -1238,31 +1280,40 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
                 center->line.append(*oneLine);
                 center->line.append(*midLine);
                 center->line.append(*otherLine);
-
-                // printf("FITS: Bahtinov Center is X: %.2f, Y: %.2f, Width: %.2f\r\n", center->x, center->y, center->width);
                 data->appendStar(center);
             }
             else
             {
-                printf("closest point does not fall within the line segment.\r\n");
+                qCWarning(KSTARS_FITS) << "Closest point does not fall within the line segment.\r\n";
             }
         }
         else
         {
-            printf("Lines are not intersecting (result: %d)\r\n", result);
+            qCWarning(KSTARS_FITS) << "Lines are not intersecting (result: " << result << ")\r\n";
         }
     }
     fflush(stdout);
 
-    // Clean up lines array (of pointers) as they are no longer needed
-    for (int index = 0; index < houghLines.size(); index++)
+    // Clean up Bahtinov line array (of pointers) as they are no longer needed
+    for (int index = 0; index < bahtinov_angles.size(); index++)
     {
-        HoughLine* pHoughLine = houghLines[index];
-        if (pHoughLine != nullptr) {
-            delete pHoughLine;
+        HoughLine* pLineAverage = bahtinov_angles[index];
+        if (pLineAverage != nullptr) {
+            delete pLineAverage;
         }
     }
-    houghLines.clear();
+    bahtinov_angles.clear();
+
+    // Clean up line averages array (of pointers) as they are no longer needed
+    for (int index = 0; index < lineAveragesPerAngle.size(); index++)
+    {
+        BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[index];
+        if (pLineAverage != nullptr) {
+            delete pLineAverage;
+        }
+    }
+    lineAveragesPerAngle.clear();
+
     top3Lines.clear();
 
     return 1;
@@ -2563,7 +2614,7 @@ void FITSData::applyFilter(FITSScale type, uint8_t * targetImage, QVector<double
         break;
 
         case FITS_GAUSSIAN:
-            gaussianBlur<T>(Options::focusBahtinovKernelSize(), Options::focusBahtinovSigma());
+            gaussianBlur<T>(Options::focusGaussianKernelSize(), Options::focusGaussianSigma());
             break;
 
         case FITS_ROTATE_CW:
@@ -2997,6 +3048,94 @@ int FITSData::getRotCounter() const
 void FITSData::setRotCounter(int value)
 {
     rotCounter = value;
+}
+
+/* Rotate an image by angle degrees.
+ * verbose generates extra info on stdout.
+ * return nullptr if successful or rotated image.
+ */
+template <typename T>
+bool FITSData::rotFITS(int angle, T& maxValue, T * rotimage)
+{
+    int nx, ny, BBP;
+    int hx, hy;
+    int offset = 0;
+    size_t bufferSize;
+
+    /* Check allocation buffer for rotated image */
+    if (rotimage == nullptr)
+    {
+        qWarning() << "No memory allocated for rotated image buffer!";
+        return false;
+    }
+
+    while (angle < 0)
+    {
+        angle = angle + 360;
+    }
+    while (angle >= 360)
+    {
+        angle = angle - 360;
+    }
+
+    nx = stats.width;
+    ny = stats.height;
+
+    hx = qFloor((nx + 1) / 2.0);
+    hy = qFloor((ny + 1) / 2.0);
+
+    BBP = stats.bytesPerPixel;
+    bufferSize = stats.samples_per_channel * m_Channels * BBP;
+    memset(rotimage, 0, bufferSize);
+
+    auto * rotBuffer = reinterpret_cast<T *>(rotimage);
+    auto * buffer = reinterpret_cast<T *>(m_ImageBuffer);
+
+    double innerCircleRadius = (0.5 * qSqrt(2.0) * qMin(hx, hy));
+    double angleInRad = angle * dms::PI / 180.0;
+    double sinAngle = qSin(angleInRad);
+    double cosAngle = qCos(angleInRad);
+    int leftEdge = qCeil(hx - innerCircleRadius);
+    int rightEdge = qFloor(hx + innerCircleRadius);
+    int topEdge = qCeil(hy - innerCircleRadius);
+    int bottomEdge = qFloor(hy + innerCircleRadius);
+
+    for (int i = 0; i < channels(); i++)
+    {
+        offset = stats.samples_per_channel * i;
+        for (int x1 = leftEdge; x1 < rightEdge; x1++)
+        {
+            for (int y1 = topEdge; y1 < bottomEdge; y1++)
+            {
+                // translate point back to origin:
+                double x2 = x1 - hx;
+                double y2 = y1 - hy;
+
+                // rotate point
+                double xnew = x2 * cosAngle - y2 * sinAngle;
+                double ynew = x2 * sinAngle + y2 * cosAngle;
+
+                // translate point back:
+                x2 = xnew + hx;
+                y2 = ynew + hy;
+
+                int orgIndex = y1 * ny + x1;
+                int newIndex = qRound(y2) * ny + qRound(x2);
+
+                if (newIndex >= 0 && newIndex < (int)(bufferSize))
+                {
+                    rotBuffer[newIndex + offset] = buffer[orgIndex + offset];
+
+                    if (rotBuffer[newIndex + offset] > maxValue)
+                    {
+                        maxValue = rotBuffer[newIndex + offset];
+                    }
+                } // else index out of bounds, do not update pixel
+            }
+        }
+    }
+
+    return true;
 }
 
 /* Rotate an image by 90, 180, or 270 degrees, with an optional
@@ -3825,20 +3964,15 @@ QVector<double> FITSData::createGaussianKernel(int size, double sigma)
         for (int x = -fOff; x <= fOff; x++) {
             double distance = ((y * y) + (x * x)) / (2.0 * sigma * sigma);
             int index = (y + fOff) * size + (x + fOff);
-            // kernel[y + fOff][x + fOff] = normal * Math.exp(-distance);
             kernel[index] = normal * qExp(-distance);
-            // kernelSum += kernel[y + fOff][x + fOff];
             kernelSum += kernel.at(index);
         }
     }
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
             int index = y * size + x;
-            // kernel[y][x] = kernel[y][x] * 1d / kernelSum;
             kernel[index] = kernel.at(index) * 1.0 / kernelSum;
-            // printf(" [%3.5f]", kernel.at(index));
         }
-        // printf("\n");
     }
 
     return kernel;
@@ -3851,7 +3985,7 @@ void FITSData::gaussianBlur(int kernelSize, double sigma)
     if (kernelSize % 2 == 0)
     {
         kernelSize--;
-        printf("Warning, size must be an odd number, correcting size to %d", kernelSize);
+        qCInfo(KSTARS_FITS) << "Warning, size must be an odd number, correcting size to " << kernelSize << "\r\n";
     }
     // Edge must be a positive number!
     if (kernelSize < 1)
@@ -3899,11 +4033,8 @@ void FITSData::ConvolutionFilter(const QVector<double> &kernel, int kernelSize)
                         int index = (filterY + fOff) * kernelSize + (filterX + fOff);
                         double kernelValue = kernel.at(index);
                         gt += (imagePtr[calcOffset]) * kernelValue;
-                        // printf("kernel[x:%3d, y:%3d, i:%3d]=%.5f     ", filterX, filterY, index, (double)gt);
                     }
-                    // printf("\n");
                 }
-                // printf("[x:%3d, y:%3d, i:%3d]=%.5f     ", offsetX, offsetY, byteOffset, (double)gt);
             }
 
             // set limits, bytes can hold values from 0 up to 255 (or max T)
@@ -3914,11 +4045,10 @@ void FITSData::ConvolutionFilter(const QVector<double> &kernel, int kernelSize)
             // set new data in the other byte array for your image data
             imagePtr[byteOffset] = gt;
         }
-        // printf("\n");
     }
 
     // Normalize resultBuffer
-    printf("Max value is %.5f\n", (double)maxResult);
+    qCDebug(KSTARS_FITS) << "Max value is " << (double)maxResult << "\r\n";
 }
 
 template <typename T>
@@ -4047,144 +4177,6 @@ void FITSData::trace(int width, int height, int id, QVector<T> &image, QVector<i
             }
         }
     }
-}
-
-template <typename T>
-void FITSData::thinning(int width, int height, const QVector<T> &gradient, const QVector<int> &direction, QVector<T> &thinned)
-{
-    thinned.resize(gradient.size());
-
-    for (int y = 0; y < height; y++) {
-        int yOffset = y * width;
-        const T *gradientLine = gradient.constData() + yOffset;
-        const T *gradientLine_m1 = y < 1? gradientLine: gradientLine - width;
-        const T *gradientLine_p1 = y >= height - 1? gradientLine: gradientLine + width;
-        const int *directionLine = direction.constData() + yOffset;
-        T *thinnedLine = thinned.data() + yOffset;
-
-        for (int x = 0; x < width; x++) {
-            int x_m1 = x < 1? 0: x - 1;
-            int x_p1 = x >= width - 1? x: x + 1;
-
-            int direction = directionLine[x];
-            T pixel = 0;
-
-            if (direction == 0) {
-                /* x x x
-                 * - - -
-                 * x x x
-                 */
-                if (gradientLine[x] < gradientLine[x_m1]
-                    || gradientLine[x] < gradientLine[x_p1])
-                    pixel = 0;
-                else
-                    pixel = gradientLine[x];
-            } else if (direction == 1) {
-                /* x x /
-                 * x / x
-                 * / x x
-                 */
-                if (gradientLine[x] < gradientLine_m1[x_p1]
-                    || gradientLine[x] < gradientLine_p1[x_m1])
-                    pixel = 0;
-                else
-                    pixel = gradientLine[x];
-            } else if (direction == 2) {
-                /* \ x x
-                 * x \ x
-                 * x x \
-                 */
-                if (gradientLine[x] < gradientLine_m1[x_m1]
-                    || gradientLine[x] < gradientLine_p1[x_p1])
-                    pixel = 0;
-                else
-                    pixel = gradientLine[x];
-            } else {
-                /* x | x
-                 * x | x
-                 * x | x
-                 */
-                if (gradientLine[x] < gradientLine_m1[x]
-                    || gradientLine[x] < gradientLine_p1[x])
-                    pixel = 0;
-                else
-                    pixel = gradientLine[x];
-            }
-
-            thinnedLine[x] = pixel;
-        }
-    }
-}
-
-template <typename T>
-void FITSData::threshold(T thLow, T thHi, const QVector<T> &image, QVector<T> &thresholded)
-{
-    thresholded.resize(image.size());
-
-    for (int i = 0; i < image.size(); i++)
-    {
-        thresholded[i] = image[i] <= thLow? 0:
-                         image[i] >= thHi? 255:
-                                           127;
-    }
-}
-
-template <typename T>
-void FITSData::traceLines(int width, int height, QVector<T> &image, int x, int y)
-{
-    int yOffset = y * width;
-    T *cannyLine = image.data() + yOffset;
-
-    if (cannyLine[x] != 255)
-        return;
-
-    for (int j = -1; j < 2; j++)
-    {
-        int nextY = y + j;
-
-        if (nextY < 0 || nextY >= height)
-            continue;
-
-        T *cannyLineNext = cannyLine + j * width;
-
-        for (int i = -1; i < 2; i++)
-        {
-            int nextX = x + i;
-
-            if (i == j || nextX < 0 || nextX >= width)
-                continue;
-
-            if (cannyLineNext[nextX] == 127)
-            {
-                cannyLineNext[nextX] = 255;
-                traceLines(width, height, image, nextX, nextY);
-            }
-        }
-    }
-}
-
-template <typename T>
-QVector<T> FITSData::hysteresis(int width, int height, const QVector<T> &image)
-{
-    QVector<T> canny(image);
-
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            traceLines<T>(width, height, canny, x, y);
-        }
-    }
-
-    for (int i = 0; i < canny.size(); i++)
-    {
-        if (canny[i] == 127)
-        {
-            canny[i] = 0;
-        }
-    }
-
-    return canny;
 }
 
 QString FITSData::getLastError() const
