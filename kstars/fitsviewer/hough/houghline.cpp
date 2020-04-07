@@ -86,7 +86,7 @@ void HoughLine::printHoughLine()
 {
     qCDebug(KSTARS_FITS) << "Houghline: [score: " << score << ", r: " << r << ", theta: " << theta << " [rad]="
                          << (theta * 180.0 / M_PI) << " [deg], p1: " << p1().x() << ", " << p1().y() << ", p2: "
-                         << p2().x() << ", " << p2().y() << "]\r\n";
+                         << p2().x() << ", " << p2().y() << "]";
 }
 
 /**

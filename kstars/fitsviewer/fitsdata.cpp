@@ -374,7 +374,7 @@ void FITSData::savePNG(const QString &filename, double dataMax, T * data /* = nu
     double val;
 
     qCInfo(KSTARS_FITS) << "Channels: " << channels() << ", dataMax: " << dataMax << ", bScale: " << bScale
-                        << ", Limit: " << bMax << ", filename: '" << filename << "'\r\n";
+                        << ", Limit: " << bMax;
 
     if (channels() == 1)
     {
@@ -1125,7 +1125,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 //    for (int i = 0; i < boundedImage->channels(); i++) {
 //        qCInfo(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
 //            << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
-//            << ", stddev: " << boundedImage->stats.stddev[i] << "\r\n";
+//            << ", stddev: " << boundedImage->stats.stddev[i];
 //    }
 //    boundedImage->savePNG<T>(name + "_0_original.png", boundedImage->stats.max[0]);
 
@@ -1237,7 +1237,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         HoughLine::getSortedTopThreeLines(bahtinov_angles, top3Lines);
 
         // Debug output
-        qCDebug(KSTARS_FITS) << "Sorted bahtinov angles:\r\n";
+        qCDebug(KSTARS_FITS) << "Sorted bahtinov angles:";
         foreach (HoughLine* ln, top3Lines)
         {
             ln->printHoughLine();
@@ -1251,7 +1251,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         HoughLine::IntersectResult result = oneLine->Intersect(*otherLine, intersection);
         if (result == HoughLine::INTERESECTING) {
 
-            qCDebug(KSTARS_FITS) << "Intersection: " << intersection.x() << ", " << intersection.y() << "\r\n";
+            qCDebug(KSTARS_FITS) << "Intersection: " << intersection.x() << ", " << intersection.y();
 
             // Determine offset between intersection and middle line
             HoughLine* midLine = top3Lines[1];
@@ -1260,7 +1260,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             if (midLine->DistancePointLine(intersection, intersectionOnMidLine, distance)) {
                 qCDebug(KSTARS_FITS) << "Distance between intersection and midline is " << distance
                                     << " at mid line point " << intersectionOnMidLine.x() << ", "
-                                    << intersectionOnMidLine.y() << "\r\n";
+                                    << intersectionOnMidLine.y();
 
                 // Add star center to selected stars
                 // Maximum Radius
@@ -1284,12 +1284,12 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             }
             else
             {
-                qCWarning(KSTARS_FITS) << "Closest point does not fall within the line segment.\r\n";
+                qCWarning(KSTARS_FITS) << "Closest point does not fall within the line segment.";
             }
         }
         else
         {
-            qCWarning(KSTARS_FITS) << "Lines are not intersecting (result: " << result << ")\r\n";
+            qCWarning(KSTARS_FITS) << "Lines are not intersecting (result: " << result << ")";
         }
     }
     fflush(stdout);
@@ -3985,7 +3985,7 @@ void FITSData::gaussianBlur(int kernelSize, double sigma)
     if (kernelSize % 2 == 0)
     {
         kernelSize--;
-        qCInfo(KSTARS_FITS) << "Warning, size must be an odd number, correcting size to " << kernelSize << "\r\n";
+        qCInfo(KSTARS_FITS) << "Warning, size must be an odd number, correcting size to " << kernelSize;
     }
     // Edge must be a positive number!
     if (kernelSize < 1)
@@ -4048,7 +4048,7 @@ void FITSData::ConvolutionFilter(const QVector<double> &kernel, int kernelSize)
     }
 
     // Normalize resultBuffer
-    qCDebug(KSTARS_FITS) << "Max value is " << (double)maxResult << "\r\n";
+    qCDebug(KSTARS_FITS) << "Max value is " << (double)maxResult;
 }
 
 template <typename T>
