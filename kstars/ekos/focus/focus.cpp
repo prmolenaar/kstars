@@ -638,6 +638,7 @@ void Focus::start()
                                 << " Step Size: " << stepIN->value() << " Threshold: " << thresholdSpin->value()
                                 << " Gaussian Sigma: " << gaussianSigmaSpin->value()
                                 << " Gaussian Kernel size: " << gaussianKernelSizeSpin->value()
+                                << " Multi row average: " << multiRowAverageSpin->value()
                                 << " Tolerance: " << toleranceIN->value()
                                 << " Frames: " << 1 /*focusFramesSpin->value()*/ << " Maximum Travel: " << maxTravelIN->value();
 
@@ -3154,6 +3155,8 @@ void Focus::syncSettings()
             Options::setFocusFramesCount(sb->value());
         else if (sb == gaussianKernelSizeSpin)
             Options::setFocusGaussianKernelSize(sb->value());
+        else if (sb == multiRowAverageSpin)
+            Options::setFocusMultiRowAverage(sb->value());
     }
     else if ( (cb = qobject_cast<QCheckBox*>(sender())))
     {
@@ -3258,7 +3261,8 @@ void Focus::loadSettings()
     // Gaussian blur controls
     gaussianSigmaSpin->setValue(Options::focusGaussianSigma());
     gaussianKernelSizeSpin->setValue(Options::focusGaussianKernelSize());
-
+    multiRowAverageSpin->setValue(Options::focusMultiRowAverage());
+    multiRowAverageSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
     focusDetectionCombo->setCurrentIndex(focusDetection);
     if (focusDetection == ALGORITHM_HOUGH)
     {
@@ -3317,6 +3321,7 @@ void Focus::initSettingsConnections()
     connect(thresholdSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(gaussianSigmaSpin, &QDoubleSpinBox::editingFinished, this, &Focus::syncSettings);
     connect(gaussianKernelSizeSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
+    connect(multiRowAverageSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
 
     connect(focusAlgorithmCombo, static_cast<void(QComboBox::*)(const QString &)>(&QComboBox::activated), this, &Ekos::Focus::syncSettings);
     connect(focusFramesSpin, static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged), this, &Focus::syncSettings);
@@ -3537,6 +3542,7 @@ void Focus::initConnections()
         thresholdSpin->setEnabled(focusDetection == ALGORITHM_THRESHOLD);
         gaussianKernelSizeSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         gaussianSigmaSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
+        multiRowAverageSpin->setEnabled(focusDetection == ALGORITHM_HOUGH);
         if (focusDetection == ALGORITHM_HOUGH)
         {
             // In case of Bahtinov mask uncheck auto select star

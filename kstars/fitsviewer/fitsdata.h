@@ -324,6 +324,8 @@ class FITSData : public QObject
         static int findBahtinovStar(FITSData *data, const QRect &boundary = QRect());
         template <typename T>
         static int findBahtinovStar(FITSData *data, const QRect &boundary);
+        template <typename T>
+        BahtinovLineAverage calculateMaxAverage(FITSData *data, int angle, int rows = 1);
 
         // Use SEP (Sextractor Library) to find stars
         template <typename T>
@@ -525,7 +527,7 @@ class FITSData : public QObject
         template <typename T>
         void gaussianBlur(int kernelSize, double sigma);
         template <typename T>
-        void ConvolutionFilter(const QVector<double> &kernel, int kernelSize);
+        void convolutionFilter(const QVector<double> &kernel, int kernelSize);
 
         // Sobel detector by Gonzalo Exequiel Pedone
         template <typename T>

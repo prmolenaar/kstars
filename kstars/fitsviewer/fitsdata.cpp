@@ -1062,6 +1062,84 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 }
 
 template <typename T>
+BahtinovLineAverage FITSData::calculateMaxAverage(FITSData *data, int angle, int rows /* = 1 */)
+{
+    int BBP = data->getBytesPerPixel();
+    int size = data->stats.samples_per_channel;
+    int width = data->stats.width;
+    int height = data->stats.height;
+    int numChannels = data->channels();
+    T maxValue = 0;
+    BahtinovLineAverage lineAverage;
+    auto * rotimage = new T[size * BBP];
+
+    data->rotFITS<T>(angle, maxValue, rotimage);
+
+    // Calculate average pixel value for each row
+    auto * rotBuffer = reinterpret_cast<T *>(rotimage);
+
+    // Rows must be an odd number!
+    if (rows % 2 == 0)
+    {
+        rows--;
+        qCInfo(KSTARS_FITS) << "Warning, rows must be an odd number, correcting rows to " << rows;
+    }
+    // Rows must be a positive number!
+    if (rows < 1)
+    {
+        rows = 1;
+    }
+
+//    printf("Angle;%d;Width;%d;Height;%d;Rows;%d;;RowSum;", angle, width, height, rows);
+
+    for (int y = 0; y < height; y++)
+    {
+        int yMin = y - ((rows - 1) / 2);
+        int yMax = y + ((rows - 1) / 2);
+
+        unsigned long multiRowSum = 0;
+        // Calculate average over multiple rows
+        for (int y1 = yMin; y1 <= yMax; y1++)
+        {
+            int y2 = y1;
+            if (y2 < 0) { y2 += height; }
+            if (y2 >= height) { y2 -= height; }
+            if (y2 < 0 || y2 >= height) {
+                qCWarning(KSTARS_FITS) << "Y still out of bounds: 0 <=" << y2 << "<" << height;
+            }
+
+            for (int x1 = 0; x1 < width; x1++)
+            {
+                int index = y2 * width + x1;
+                unsigned long channelAverage = 0;
+                for (int i = 0; i < numChannels; i++)
+                {
+                    int offset = size * i;
+                    channelAverage += rotBuffer[index + offset];
+                }
+                multiRowSum += qRound(channelAverage / (double)numChannels);
+            }
+        }
+//        printf("%lu;", multiRowSum);
+
+        double average = multiRowSum / (double)(width * rows);
+        if (average > lineAverage.average)
+        {
+            lineAverage.average = average;
+            lineAverage.offset = y;
+        }
+    }
+//    printf(";;MaxAverage;%.3f;MaxAverageIndex;%lu\r\n", lineAverage.average, lineAverage.offset);
+//    fflush(stdout);
+
+    rotBuffer = nullptr;
+    delete[] rotimage;
+    rotimage = nullptr;
+
+    return lineAverage;
+}
+
+template <typename T>
 int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
 {
     if (boundary.isEmpty())
@@ -1101,7 +1179,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         }
     }
     // #3 Create new FITSData to hold it
-    auto * boundedImage                     = new FITSData();
+    FITSData* boundedImage                  = new FITSData();
     boundedImage->stats.width               = subW;
     boundedImage->stats.height              = subH;
     boundedImage->stats.bitpix              = data->stats.bitpix;
@@ -1117,65 +1195,40 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     boundedImage->calculateStats(true);
 
     // Save boundedImage to file for debug purposes
-//    QDir dir;
-//    QDateTime now = KStarsData::Instance()->lt();
-//    QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
-//    dir.mkpath(path);
-//    QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
-//    for (int i = 0; i < boundedImage->channels(); i++) {
-//        qCInfo(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
-//            << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
-//            << ", stddev: " << boundedImage->stats.stddev[i];
-//    }
-//    boundedImage->savePNG<T>(name + "_0_original.png", boundedImage->stats.max[0]);
+    if (KSTARS_FITS().isDebugEnabled()) {
+        QDir dir;
+        QDateTime now = KStarsData::Instance()->lt();
+        QString path = KSPaths::writableLocation(QStandardPaths::GenericDataLocation) + "bahtinov/" + now.toString("yyyy-MM-dd");
+        dir.mkpath(path);
+        QString name = path + QStringLiteral("/") + "bahtinov_frame_" + now.toString("HH-mm-ss");
+        for (int i = 0; i < boundedImage->channels(); i++) {
+            qCDebug(KSTARS_FITS) << "Channel[" << i << "/" << boundedImage->channels() << "], Min: " << boundedImage->stats.min[i]
+                << ", Max: " << boundedImage->stats.max[i] << ", mean: " << boundedImage->stats.mean[i]
+                << ", stddev: " << boundedImage->stats.stddev[i];
+        }
+        boundedImage->savePNG<T>(name + "_original.png", boundedImage->stats.max[0]);
+    }
+
+    QElapsedTimer timer1;
 
     // Rotate image 180 degrees in steps of 1 degree
-    // TODO PRM: Move to Future to speed up process
-    auto * rotimage = new T[size * BBP];
-    QMap<int, BahtinovLineAverage*> lineAveragesPerAngle;
+    QMap<int, BahtinovLineAverage> lineAveragesPerAngle;
     int steps = 180;
     double radPerStep = dms::PI / (double)steps;
     int width = boundedImage->stats.width;
     int height = boundedImage->stats.height;
-    int numChannels = boundedImage->channels();
-    int numSamplesPerChannel = boundedImage->stats.samples_per_channel;
+
+    timer1.start();
 
     for (int angle = 0; angle < steps; angle++)
     {
-        // Rotate image one step
-        T maxValue = 0;
-        boundedImage->rotFITS<T>(angle, maxValue, rotimage);
-
-        // Calculate average pixel value for each row
-        auto * rotBuffer = reinterpret_cast<T *>(rotimage);
-
-        BahtinovLineAverage* pLineAverage = new BahtinovLineAverage();
-
-        for (int y1 = 0; y1 < height; y1++)
-        {
-            unsigned long rowSum = 0;
-            for (int x1 = 0; x1 < width; x1++)
-            {
-                int index = y1 * width + x1;
-                unsigned long channelAverage = 0;
-                for (int i = 0; i < numChannels; i++)
-                {
-                    offset = numSamplesPerChannel * i;
-                    channelAverage += rotBuffer[index + offset];
-                }
-                rowSum += channelAverage / numChannels;
-            }
-            double average = rowSum / (double)width;
-            if (pLineAverage != nullptr && average > pLineAverage->average)
-            {
-                pLineAverage->average = average;
-                pLineAverage->offset = y1;
-            }
-        }
-
+        // TODO PRM: Apply multi threading to speed up calculation (can be done in parallel)
+        BahtinovLineAverage lineAverage = boundedImage->calculateMaxAverage<T>(boundedImage, angle, Options::focusMultiRowAverage());
         // Store line average in map
-        lineAveragesPerAngle.insert(angle, pLineAverage);
+        lineAveragesPerAngle.insert(angle, lineAverage);
     }
+
+    qCDebug(KSTARS_FITS) << "Getting max average for all 180 rotations took" << timer1.elapsed() << "milliseconds";
 
     // Not needed anymore
     delete boundedImage;
@@ -1191,15 +1244,12 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         int maxAverageOffset = 0;
         for (int angle = 0; angle < steps; angle++)
         {
-            BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[angle];
-            if (pLineAverage != nullptr)
+            BahtinovLineAverage lineAverage = lineAveragesPerAngle[angle];
+            if (lineAverage.average > maxAverage)
             {
-                if (pLineAverage->average > maxAverage)
-                {
-                    maxAverage = pLineAverage->average;
-                    maxAverageOffset = pLineAverage->offset;
-                    maxAngle = angle;
-                }
+                maxAverage = lineAverage.average;
+                maxAverageOffset = lineAverage.offset;
+                maxAngle = angle;
             }
         }
         HoughLine* pHoughLine = new HoughLine(maxAngle * radPerStep, maxAverageOffset, width, height, (int)maxAverage);
@@ -1209,7 +1259,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         }
 
         // Remove data around peak to prevent it from being detected again
-        int minBahtinovAngleOffset = 10;
+        int minBahtinovAngleOffset = 18;
         for (int subAngle = maxAngle - minBahtinovAngleOffset; subAngle < maxAngle + minBahtinovAngleOffset; subAngle++)
         {
             int angleInRange = subAngle;
@@ -1221,12 +1271,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             {
                 angleInRange -= 180;
             }
-            BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[angleInRange];
-            if (pLineAverage != nullptr)
-            {
-                delete pLineAverage;
-                lineAveragesPerAngle.remove(angleInRange);
-            }
+            lineAveragesPerAngle.remove(angleInRange);
         }
     }
 
@@ -1242,7 +1287,6 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
         {
             ln->printHoughLine();
         }
-        fflush(stdout);
 
         // Determine intersection between outer lines
         HoughLine* oneLine = top3Lines[0];
@@ -1292,7 +1336,6 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
             qCWarning(KSTARS_FITS) << "Lines are not intersecting (result: " << result << ")";
         }
     }
-    fflush(stdout);
 
     // Clean up Bahtinov line array (of pointers) as they are no longer needed
     for (int index = 0; index < bahtinov_angles.size(); index++)
@@ -1304,14 +1347,7 @@ int FITSData::findBahtinovStar(FITSData *data, const QRect &boundary)
     }
     bahtinov_angles.clear();
 
-    // Clean up line averages array (of pointers) as they are no longer needed
-    for (int index = 0; index < lineAveragesPerAngle.size(); index++)
-    {
-        BahtinovLineAverage* pLineAverage = lineAveragesPerAngle[index];
-        if (pLineAverage != nullptr) {
-            delete pLineAverage;
-        }
-    }
+    // Clean up line averages array as they are no longer needed
     lineAveragesPerAngle.clear();
 
     top3Lines.clear();
@@ -3994,11 +4030,11 @@ void FITSData::gaussianBlur(int kernelSize, double sigma)
     }
 
     QVector<double> gaussianKernel = createGaussianKernel(kernelSize, sigma);
-    ConvolutionFilter<T>(gaussianKernel, kernelSize);
+    convolutionFilter<T>(gaussianKernel, kernelSize);
 }
 
 template <typename T>
-void FITSData::ConvolutionFilter(const QVector<double> &kernel, int kernelSize)
+void FITSData::convolutionFilter(const QVector<double> &kernel, int kernelSize)
 {
     T * imagePtr = reinterpret_cast<T *>(m_ImageBuffer);
     T maxResult = 0;
