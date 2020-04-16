@@ -895,8 +895,46 @@ void FITSView::drawStarCentroid(QPainter * painter, double scale)
         // SEP coordinates are in the center of pixels, and Qt at the boundary.
         const double xCoord = starCenter->x - 0.5;
         const double yCoord = starCenter->y - 0.5;
-        const double radius = starCenter->HFR > 0 ? 2.0f * starCenter->HFR * scale : w;
-        painter->drawEllipse(QPointF(xCoord * scale, yCoord * scale), radius, radius);
+
+        const int xc = std::round((starCenter->x - starCenter->width / 2.0f) * scale);
+        const int yc = std::round((starCenter->y - starCenter->width / 2.0f) * scale);
+        const int hw = w / 2;
+
+        BahtinovEdge* bEdge = dynamic_cast<BahtinovEdge*>(starCenter);
+        if (bEdge != nullptr)
+        {
+            // Draw lines of diffraction pattern
+            painter->setPen(QPen(Qt::red, scaleSize(2)));
+            painter->drawLine(bEdge->line[0].x1() * scale, bEdge->line[0].y1() * scale,
+                    bEdge->line[0].x2() * scale, bEdge->line[0].y2() * scale);
+            painter->setPen(QPen(Qt::green, scaleSize(2)));
+            painter->drawLine(bEdge->line[1].x1() * scale, bEdge->line[1].y1() * scale,
+                    bEdge->line[1].x2() * scale, bEdge->line[1].y2() * scale);
+            painter->setPen(QPen(Qt::darkGreen, scaleSize(2)));
+            painter->drawLine(bEdge->line[2].x1() * scale, bEdge->line[2].y1() * scale,
+                    bEdge->line[2].x2() * scale, bEdge->line[2].y2() * scale);
+
+            // Draw center circle
+            painter->setPen(QPen(Qt::white, scaleSize(2)));
+            painter->drawEllipse(xc, yc, w, w);
+
+            // Draw offset circle
+            double factor = 15.0;
+            QPointF offsetVector = (bEdge->offset - QPointF(starCenter->x, starCenter->y)) * factor;
+            int const xo = std::round((starCenter->x + offsetVector.x() - starCenter->width / 2.0f) * scale);
+            int const yo = std::round((starCenter->y + offsetVector.y() - starCenter->width / 2.0f) * scale);
+            painter->setPen(QPen(Qt::red, scaleSize(2)));
+            painter->drawEllipse(xo, yo, w, w);
+
+            // Draw line between center circle and offset circle
+            painter->setPen(QPen(Qt::red, scaleSize(2)));
+            painter->drawLine(xc + hw, yc + hw, xo + hw, yo + hw);
+        }
+        else
+        {
+	        const double radius = starCenter->HFR > 0 ? 2.0f * starCenter->HFR * scale : w;
+	        painter->drawEllipse(QPointF(xCoord * scale, yCoord * scale), radius, radius);
+        }
 
         if (showStarsHFR)
         {
