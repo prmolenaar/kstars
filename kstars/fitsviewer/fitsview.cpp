@@ -895,9 +895,8 @@ void FITSView::drawStarCentroid(QPainter * painter, double scale)
         // SEP coordinates are in the center of pixels, and Qt at the boundary.
         const double xCoord = starCenter->x - 0.5;
         const double yCoord = starCenter->y - 0.5;
-
-        const int xc = std::round((starCenter->x - starCenter->width / 2.0f) * scale);
-        const int yc = std::round((starCenter->y - starCenter->width / 2.0f) * scale);
+        const int xc = std::round((xCoord - starCenter->width / 2.0f) * scale);
+        const int yc = std::round((yCoord - starCenter->width / 2.0f) * scale);
         const int hw = w / 2;
 
         BahtinovEdge* bEdge = dynamic_cast<BahtinovEdge*>(starCenter);
@@ -938,12 +937,9 @@ void FITSView::drawStarCentroid(QPainter * painter, double scale)
 
         if (showStarsHFR)
         {
-            int const x1 = std::round((xCoord - starCenter->width / 2.0f) * scale);
-            int const y1 = std::round((yCoord - starCenter->width / 2.0f) * scale);
-
             // Ask the painter how large will the HFR text be
             QString const hfr = QString("%1").arg(starCenter->HFR, 0, 'f', 2);
-            if (!drawHFR(painter, hfr, x1 + w + 5, y1 + w / 2))
+            if (!drawHFR(painter, hfr, xc + w + 5, yc + w / 2))
             {
                 // Try a few more time with smaller fonts;
                 for (int i = 0; i < 10; ++i)
@@ -952,7 +948,7 @@ void FITSView::drawStarCentroid(QPainter * painter, double scale)
                     if (tempFontSize <= 0) break;
                     painterFont.setPointSizeF(tempFontSize);
                     painter->setFont(painterFont);
-                    if (drawHFR(painter, hfr, x1 + w + 5, y1 + w / 2))
+                    if (drawHFR(painter, hfr, xc + w + 5, yc + w / 2))
                         break;
                 }
                 // Reset the font size.
